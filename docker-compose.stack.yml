@@ -1,0 +1,86 @@
+# Stack única para deploy em produção via Portainer (Stacks → Web editor).
+
+
+services:
+  postgres:
+    image: docker.io/postgis/postgis:latest
+    container_name: terra_postgis
+    environment:
+      - TZ=America/Fortaleza
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - terra_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  tgdmserver:
+    image: wellingtonwfsarmento/terra-geodata-mini-server:latest
+    container_name: terra_geodata_mini_server
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - TZ=America/Fortaleza
+      - DATABASE_TYPE=${DATABASE_TYPE}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - TABLE_GEOM_MUNICIPIOS=${TABLE_GEOM_MUNICIPIOS}
+      - TABLE_DADOS_FUNDIARIOS=${TABLE_DADOS_FUNDIARIOS}
+      - TABLE_DADOS_ASSENTAMENTOS=${TABLE_DADOS_ASSENTAMENTOS}
+      - TABLE_DADOS_RESERVATORIOS=${TABLE_DADOS_RESERVATORIOS}
+      - TABLE_TEMPORARY=${TABLE_TEMPORARY}
+      - TABLE_RA_MUNICIPIOS_MF_CE=${TABLE_RA_MUNICIPIOS_MF_CE}
+      - JWT_SECRET=${JWT_SECRET}
+      - JWT_ALGORITHM=${JWT_ALGORITHM}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES}
+      - GEOMETRY_TOLERANCE=${GEOMETRY_TOLERANCE}
+      - GEOMETRY_DECIMALS=${GEOMETRY_DECIMALS}
+      - TGDMSERVER_HOST=0.0.0.0
+      - TGDMSERVER_PORT=8000
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS}
+      - GUNICORN_THREADS=${GUNICORN_THREADS}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT}
+      - GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL}
+      # TOKEN_GEOAPI não entra aqui: a importação da GeoAPI do IDACE é manual
+      # hoje (config.py já trata TOKEN_GEOAPI como opcional, default ""). Se
+      # esse processo for automatizado no futuro (Carregador de Dados), volta
+      # a ser necessário.
+    ports:
+      - "8000:8000"
+    networks:
+      - terra_network
+    restart: unless-stopped
+
+  dfundce:
+    image: wellingtonwfsarmento/dashboard-fundiario-ceara:latest
+    container_name: dashboard_fundiario_ce
+    environment:
+      - TZ=America/Fortaleza
+      - DATA_SERVICE_URL=http://tgdmserver:8000
+    ports:
+      - "8501:8501"
+    networks:
+      - terra_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+
+networks:
+  terra_network:
+    name: terra_network
+    external: true

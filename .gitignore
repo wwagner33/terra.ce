@@ -2,4 +2,7 @@
  .idea/
  .claude/
  $HOME/
+
+ # Segredos locais (usado por docker-compose.stack.yml)
+ .env
  
