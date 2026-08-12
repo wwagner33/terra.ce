@@ -3,4 +3,4 @@
 	url = https://github.com/wwagner33/dashboard_fundiario_ceara.git
 [submodule "terraGeoDataMiniServer"]
 	path = terraGeoDataMiniServer
-	url = https://github.com/wwagner33/terraGeoDataMiniServer.git
+	url = https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer.git
