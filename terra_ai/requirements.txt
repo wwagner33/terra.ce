@@ -1,0 +1,6 @@
+streamlit
+requests
+anthropic
+PyJWT
+python-dotenv
+pandas
