@@ -5,4 +5,5 @@
 
  # Segredos locais (usado por docker-compose.stack.yml)
  .env
+ *.txt
  
