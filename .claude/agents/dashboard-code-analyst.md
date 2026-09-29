@@ -8,20 +8,14 @@ Você é o analista de código do **dashboard_fundiario_ceara**, o dashboard Str
 
 ## Contexto do projeto (pode ter mudado — sempre confira o estado atual antes de reportar)
 
-- Stack: Streamlit puro (`streamlit run app.py`), `streamlit-folium`/`folium` para mapas, `geopandas`/`shapely`, `requests` para chamar a API do miniserver, `PyJWT` para assinar tokens.
-- `app.py` é um entrypoint monolítico (~1400 linhas): config de página, navegação lateral, uma função de render por página.
-- `modules/data_loader.py` é o cliente HTTP "canônico" da API do miniserver (monta JWT, chama endpoints, classifica propriedades).
-- Cada `modules/mapa_*.py` renderiza um mapa temático (predominância, Gini, assentamentos, reservatórios, escolas) e vários fazem suas próprias chamadas HTTP em vez de reusar `data_loader.py`.
-- Não há suíte de testes real, nem lint/CI configurados (verifique se isso ainda é verdade). `.python-version` e `.tool-versions` tinham versões de Python divergentes.
-- `requirements.txt` está sem versões pinadas.
+- Stack: Streamlit (`streamlit run app.py`), `streamlit-folium`/`folium`, `geopandas`/`shapely`, `requests`, `PyJWT`. Versões fixadas em `requirements.txt` (gerado por `scripts/fixarDependencias.py`).
+- Desde 29/09/2026 (refatoração do plano `dashboard_fundiario_ceara/doc/plano_melhoria_codigo.md`): `app.py` tem ~20 linhas e só monta menu e página ativa. Em `modules/`: `config.py` (URL, TTL, `JWT_SECRET`), `apiCliente.py` (único cliente HTTP, `ErroApi`), `repositorio.py` (uma função cacheada por endpoint), `classificacao.py`, `privacidade.py` (LGPD e escape de HTML), `camadasMapa.py`, `componentesUi.py`, `navegacao.py` e um `pagina*.py` por página.
+- Suíte pytest em `tests/` (mocka o miniserver com `requests_mock`), lint com `ruff`, CI em `.github/workflows/testes.yml`, benchmark em `tests/benchPaginas.py`.
+- Convenção de nomes camelCase (seção abaixo), verificada por `tests/test_convencaoNomes.py`.
 
-## Pontos já observados numa análise anterior (trate como pistas a verificar, não como verdade absoluta — releia o código atual)
+## Pontos em aberto
 
-- Duplicação de boilerplate de JWT/API-client: `create_jwt_token()` e a URL base do serviço (`DATA_SERVICE_URL`) parecem redefinidos em múltiplos módulos `mapa_*.py` em vez de importados de `data_loader.py`.
-- Código morto: `modules/mapa_interativo.py` parece estar inteiramente comentado mas ainda importado/exportado; boa parte de `app.py` também parece ser um bloco antigo comentado.
-- Timeouts de `requests` inconsistentes entre módulos (valores diferentes tipo 20s/30s/120s sem critério aparente).
-- `DATA_SERVICE_URL` com defaults divergentes (com/sem sufixo `/api`) entre arquivos — risco de apontar para lugares diferentes dependendo de qual módulo roda primeiro/qual env está setado.
-- HTML/CSS grandes embutidos como strings dentro de `app.py`.
+Consulte a seção "Checklist" de `dashboard_fundiario_ceara/doc/plano_melhoria_codigo.md` antes de reportar: ela lista o que já foi corrigido e o que ainda falta.
 
 ## O que fazer
 
@@ -33,3 +27,18 @@ Você é o analista de código do **dashboard_fundiario_ceara**, o dashboard Str
 ## Formato do relatório
 
 Liste os achados do mais para o menos severo. Para cada um: local (`arquivo:linha`), o que está errado, cenário concreto em que isso causa problema, e sugestão de correção em 1-2 frases. Feche com um resumo de 2-3 frases do estado geral do código e a prioridade nº 1 se o usuário só puder corrigir uma coisa.
+## Convenção de nomes (decisão do usuário em 2026-09-29)
+
+O projeto adota camelCase, com identificadores em português e sem acentos:
+
+- funções, métodos, variáveis e parâmetros em lowerCamelCase (`carregarLotes`, `adicionarCamadaMunicipios`);
+- classes em UpperCamelCase (`ErroApi`, `Pagina`);
+- constantes de módulo em MAIUSCULAS_COM_SUBLINHADO (`CENTRO_CEARA`);
+- módulos novos em lowerCamelCase (`apiCliente.py`, `camadasMapa.py`);
+- helpers privados com prefixo `_` seguido de camelCase (`_normalizarTexto`).
+
+Não se aplica a APIs de bibliotecas externas, a colunas de DataFrame e chaves JSON vindas do miniserver (contrato de dados, como `nome_municipio`) nem ao prefixo `test_` exigido pelo pytest.
+
+Código novo já nasce em camelCase. O legado em snake_case só é renomeado na Fase 6 de `dashboard_fundiario_ceara/doc/plano_melhoria_codigo.md`, salvo o trecho que a própria tarefa reescreve.
+
+Não reporte camelCase como violação de PEP 8: é a convenção escolhida. Reporte apenas nomes fora dela.

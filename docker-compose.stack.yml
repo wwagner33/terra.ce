@@ -71,6 +71,9 @@ services:
     environment:
       - TZ=America/Fortaleza
       - DATA_SERVICE_URL=http://tgdmserver:8000
+      # Segredo JWT compartilhado com o tgdmserver. Defina no Portainer, sem aspas.
+      # A partir da versão que exclui o secrets.toml da imagem, é obrigatório.
+      - JWT_SECRET=${JWT_SECRET}
     ports:
       - "8501:8501"
     networks:

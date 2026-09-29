@@ -19,3 +19,16 @@ Você aplica correções de código já aprovadas no **dashboard_fundiario_ceara
 2. Aplique a correção especificada, do jeito mais direto possível (sem refatoração adicional não pedida).
 3. Depois de editar, rode alguma verificação rápida de sanidade quando fizer sentido (ex: `python -c "import tomllib; tomllib.load(...)"` para validar um TOML editado, ou `docker compose config` para validar um `docker-compose.yml` editado) — mas a validação funcional completa é responsabilidade do `dashboard-tester`, chamado depois de você.
 4. Ao final, resuma exatamente o que mudou (arquivo por arquivo, com um resumo do diff) e qualquer coisa que ficou de fora do escopo por exigir uma decisão do usuário (ex: valor real de um segredo).
+## Convenção de nomes (decisão do usuário em 2026-09-29)
+
+O projeto adota camelCase, com identificadores em português e sem acentos:
+
+- funções, métodos, variáveis e parâmetros em lowerCamelCase (`carregarLotes`, `adicionarCamadaMunicipios`);
+- classes em UpperCamelCase (`ErroApi`, `Pagina`);
+- constantes de módulo em MAIUSCULAS_COM_SUBLINHADO (`CENTRO_CEARA`);
+- módulos novos em lowerCamelCase (`apiCliente.py`, `camadasMapa.py`);
+- helpers privados com prefixo `_` seguido de camelCase (`_normalizarTexto`).
+
+Não se aplica a APIs de bibliotecas externas, a colunas de DataFrame e chaves JSON vindas do miniserver (contrato de dados, como `nome_municipio`) nem ao prefixo `test_` exigido pelo pytest.
+
+Código novo já nasce em camelCase. O legado em snake_case só é renomeado na Fase 6 de `dashboard_fundiario_ceara/doc/plano_melhoria_codigo.md`, salvo o trecho que a própria tarefa reescreve.
