@@ -1,9 +1,12 @@
- # Pastas locais de desenvolvimento
- .idea/
- .claude/
- $HOME/
+# Pastas locais de desenvolvimento
+.idea/
+.claude/
+$HOME/
 
- # Segredos locais (usado por docker-compose.stack.yml)
- .env
- *.txt
- 
+# Segredos locais (usado por docker-compose.stack.yml)
+.env
+chave-claudeapi.txt
+
+# Variáveis preenchidas da stack (nunca versionar)
+stack.env
+*.stack.env
