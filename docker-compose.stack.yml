@@ -1,82 +1,88 @@
-# Stack única para deploy em produção via Portainer (Stacks → Web editor).
-
+# Stack de produção do Terra.Ce, gerenciada pelo Portainer.
+# Portainer: Stacks → Add stack → Web editor. Cole este arquivo e carregue as
+# variáveis do stack.env.example preenchido. Roteiro em doc/implantacao_portainer.md.
+#
+# Variáveis obrigatórias falham na implantação com mensagem clara (${VAR:?...}).
+# As demais têm valor padrão (${VAR:-padrão}) para nunca virarem string vazia.
 
 services:
   postgres:
-    image: docker.io/postgis/postgis:latest
+    # Mesma versão principal que já está em produção. Trocar a versão principal
+    # do Postgres exige migrar o volume; veja o roteiro antes de mudar.
+    image: docker.io/postgis/postgis:${POSTGIS_TAG:?defina POSTGIS_TAG com a versão em uso, por exemplo 17-3.5}
     container_name: terra_postgis
     environment:
       - TZ=America/Fortaleza
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER:-terra}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-geodata}
     ports:
-      - "5432:5432"
+      # Só na própria máquina do servidor. Para acessar de fora, use túnel SSH.
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - terra_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-terra} -d ${POSTGRES_DB:-geodata}"]
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
 
   tgdmserver:
-    image: wellingtonwfsarmento/terra-geodata-mini-server:latest
+    image: docker.io/wellingtonwfsarmento/terra-geodata-mini-server:${TGDM_TAG:-1.2.0}
     container_name: terra_geodata_mini_server
     depends_on:
       postgres:
         condition: service_healthy
     environment:
       - TZ=America/Fortaleza
-      - DATABASE_TYPE=${DATABASE_TYPE}
+      - DATABASE_TYPE=postgres
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_DB=${POSTGRES_DB}
-      - TABLE_GEOM_MUNICIPIOS=${TABLE_GEOM_MUNICIPIOS}
-      - TABLE_DADOS_FUNDIARIOS=${TABLE_DADOS_FUNDIARIOS}
-      - TABLE_DADOS_ASSENTAMENTOS=${TABLE_DADOS_ASSENTAMENTOS}
-      - TABLE_DADOS_RESERVATORIOS=${TABLE_DADOS_RESERVATORIOS}
-      - TABLE_TEMPORARY=${TABLE_TEMPORARY}
-      - TABLE_RA_MUNICIPIOS_MF_CE=${TABLE_RA_MUNICIPIOS_MF_CE}
-      - JWT_SECRET=${JWT_SECRET}
-      - JWT_ALGORITHM=${JWT_ALGORITHM}
-      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES}
-      - GEOMETRY_TOLERANCE=${GEOMETRY_TOLERANCE}
-      - GEOMETRY_DECIMALS=${GEOMETRY_DECIMALS}
+      - POSTGRES_USER=${POSTGRES_USER:-terra}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB:-geodata}
+      - TABLE_GEOM_MUNICIPIOS=${TABLE_GEOM_MUNICIPIOS:-municipios_ceara}
+      - TABLE_DADOS_FUNDIARIOS=${TABLE_DADOS_FUNDIARIOS:-malha_fundiaria_ceara}
+      - TABLE_DADOS_ASSENTAMENTOS=${TABLE_DADOS_ASSENTAMENTOS:-assentamentos_ceara}
+      - TABLE_DADOS_RESERVATORIOS=${TABLE_DADOS_RESERVATORIOS:-reservatorios_ceara}
+      - TABLE_TEMPORARY=${TABLE_TEMPORARY:-temp_table}
+      - TABLE_RA_MUNICIPIOS_MF_CE=${TABLE_RA_MUNICIPIOS_MF_CE:-regioes_administrativas_municipios_malha_fundiaria_ceara}
+      - JWT_SECRET=${JWT_SECRET:?defina JWT_SECRET, o mesmo valor do dashboard}
+      - JWT_ALGORITHM=${JWT_ALGORITHM:-HS256}
+      - JWT_EXPIRE_MINUTES=${JWT_EXPIRE_MINUTES:-30}
+      - GEOMETRY_TOLERANCE=${GEOMETRY_TOLERANCE:-0.001}
+      - GEOMETRY_DECIMALS=${GEOMETRY_DECIMALS:-6}
       - TGDMSERVER_HOST=0.0.0.0
       - TGDMSERVER_PORT=8000
-      - GUNICORN_WORKERS=${GUNICORN_WORKERS}
-      - GUNICORN_THREADS=${GUNICORN_THREADS}
-      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT}
-      - GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL}
-      # TOKEN_GEOAPI não entra aqui: a importação da GeoAPI do IDACE é manual
-      # hoje (config.py já trata TOKEN_GEOAPI como opcional, default ""). Se
-      # esse processo for automatizado no futuro (Carregador de Dados), volta
-      # a ser necessário.
+      - GUNICORN_WORKERS=${GUNICORN_WORKERS:-4}
+      - GUNICORN_THREADS=${GUNICORN_THREADS:-8}
+      - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-120}
+      - GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL:-info}
+      # A importação da GeoAPI do IDACE é manual; TOKEN_GEOAPI não é usado aqui.
     ports:
-      - "8000:8000"
+      # Só na própria máquina do servidor (por exemplo, para o Terra-AI).
+      # O dashboard fala com o miniserver pela rede interna terra_network.
+      - "127.0.0.1:8000:8000"
     networks:
       - terra_network
     restart: unless-stopped
 
   dfundce:
-    image: wellingtonwfsarmento/dashboard-fundiario-ceara:latest
+    image: docker.io/wellingtonwfsarmento/dashboard-fundiario-ceara:${DFUNDCE_TAG:-1.2.0}
     container_name: dashboard_fundiario_ce
+    depends_on:
+      - tgdmserver
     environment:
       - TZ=America/Fortaleza
       - DATA_SERVICE_URL=http://tgdmserver:8000
-      # Segredo JWT compartilhado com o tgdmserver. Defina no Portainer, sem aspas.
-      # A partir da versão que exclui o secrets.toml da imagem, é obrigatório.
-      - JWT_SECRET=${JWT_SECRET}
-      # Chave dos basemaps da CARTO (restrita a terrace.virtual.ufc.br). Defina nas
-      # variáveis da stack, sem aspas. Vazia, o dashboard usa OpenStreetMap.
-      - CARTO_API_KEY=${CARTO_API_KEY}
+      # Mesmo valor do tgdmserver. A imagem não traz o secrets.toml.
+      - JWT_SECRET=${JWT_SECRET:?defina JWT_SECRET, o mesmo valor do dashboard}
+      # Chave dos basemaps da CARTO (restrita a terrace.virtual.ufc.br). Vazia: OpenStreetMap.
+      - CARTO_API_KEY=${CARTO_API_KEY:-}
     ports:
       - "8501:8501"
     networks:
@@ -84,7 +90,11 @@ services:
     restart: unless-stopped
 
 volumes:
+  # Volume que já existe no servidor, com os dados atuais. Declarado como
+  # externo para a stack nunca criar um banco vazio por engano.
   postgres_data:
+    external: true
+    name: ${POSTGRES_VOLUME:?defina POSTGRES_VOLUME com o nome do volume atual do Postgres}
 
 networks:
   terra_network:
