@@ -1,6 +1,6 @@
 [submodule "dashboard_fundiario_ceara"]
 	path = dashboard_fundiario_ceara
-	url = https://github.com/wwagner33/dashboard_fundiario_ceara.git
+	url = https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara.git
 [submodule "terraGeoDataMiniServer"]
 	path = terraGeoDataMiniServer
 	url = https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer.git
