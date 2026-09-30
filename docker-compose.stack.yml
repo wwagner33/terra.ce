@@ -1,6 +1,6 @@
 # Stack de produção do Terra.Ce, gerenciada pelo Portainer.
 # Portainer: Stacks → Add stack → Web editor. Cole este arquivo e carregue as
-# variáveis do stack.env.example preenchido. Roteiro em doc/implantacao_portainer.md.
+# variáveis do stack.env.example preenchido. Roteiro em IMPLANTACAO_PORTAINER.md.
 #
 # Variáveis obrigatórias falham na implantação com mensagem clara (${VAR:?...}).
 # As demais têm valor padrão (${VAR:-padrão}) para nunca virarem string vazia.
