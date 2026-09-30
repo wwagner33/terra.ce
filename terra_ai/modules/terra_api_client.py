@@ -36,6 +36,9 @@ def gerar_token(expira_minutos: int = 30) -> str:
         "sub": "terra-ai-dashboard",
         "iat": agora,
         "exp": agora + dt.timedelta(minutes=expira_minutos),
+        # Claims exigidos pelo terraGeoDataMiniServer desde a versão 1.2.0.
+        "aud": os.environ.get("TGDM_JWT_AUDIENCE", "terra-geodata-mini-server"),
+        "iss": "terra_ai",
     }
     return jwt.encode(payload, segredo, algorithm=algoritmo)
 
