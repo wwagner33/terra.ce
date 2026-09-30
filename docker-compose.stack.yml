@@ -74,6 +74,9 @@ services:
       # Segredo JWT compartilhado com o tgdmserver. Defina no Portainer, sem aspas.
       # A partir da versão que exclui o secrets.toml da imagem, é obrigatório.
       - JWT_SECRET=${JWT_SECRET}
+      # Chave dos basemaps da CARTO (restrita a terrace.virtual.ufc.br). Defina nas
+      # variáveis da stack, sem aspas. Vazia, o dashboard usa OpenStreetMap.
+      - CARTO_API_KEY=${CARTO_API_KEY}
     ports:
       - "8501:8501"
     networks:
