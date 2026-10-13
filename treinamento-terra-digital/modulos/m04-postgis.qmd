@@ -1,0 +1,438 @@
+---
+title: "M4 · PostgreSQL e PostGIS"
+subtitle: "SQL, transações, índices e funções espaciais"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** backend e banco · **Recomendado para:** dados e painéis, infraestrutura · **Pré-requisitos:** [M3](m03-geoprocessamento.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Todo dado da plataforma mora num PostgreSQL com a extensão PostGIS. Cada
+endpoint do miniserver é, no fundo, uma consulta SQL. O bug mais grave
+corrigido na versão 1.2.0 (B10, que duplicava assentamentos a cada reinício)
+era um problema de transação e de carga, não de Python.
+:::
+
+## Objetivos
+
+- Escrever consultas com filtro, agrupamento e junção.
+- Entender transações e por que a carga é atômica.
+- Usar índices e ler um plano de execução.
+- Reconhecer as funções PostGIS usadas no projeto.
+- Fazer backup e restauração com segurança.
+
+## 1. O banco sintético dos exercícios
+
+Os exercícios de SQL desta página rodam num **SQLite dentro do seu
+navegador**, sobre um banco pequeno com três tabelas. Os municípios existem;
+módulos fiscais, imóveis, áreas e assentamentos são **fictícios**. No lugar do
+nome do proprietário há um pseudônimo (`P001`), como o `id_proprietario` que o
+miniserver entrega.
+
+| Tabela | Colunas |
+|---|---|
+| `municipios` | `nome` (chave), `regiao`, `modulo_fiscal_ha` |
+| `lotes` | `id` (chave), `municipio`, `area_ha`, `situacao_juridica`, `id_proprietario` |
+| `assentamentos` | `id` (chave), `nome`, `municipio`, `familias`, `area_ha` |
+
+O SQL básico é o mesmo no SQLite e no PostgreSQL. As funções espaciais
+(`ST_*`) não existem no SQLite: elas aparecem nas seções 6 e 7, com exemplos
+do projeto.
+
+## 2. Consultar, filtrar e ordenar
+
+```sql
+SELECT id, area_ha               -- quais colunas
+FROM lotes                       -- de qual tabela
+WHERE municipio = 'Barbalha'     -- quais linhas
+ORDER BY area_ha DESC            -- em que ordem
+LIMIT 3;                         -- quantas
+```
+
+~~~exercicio
+id: m04-maiores
+tipo: sql
+dados: fundiario
+pergunta: Liste o `id` e a `area_ha` dos **três maiores** lotes de Barbalha, do maior para o menor.
+inicial: |
+  SELECT id, area_ha
+  FROM lotes
+solucao: |
+  SELECT id, area_ha
+  FROM lotes
+  WHERE municipio = 'Barbalha'
+  ORDER BY area_ha DESC
+  LIMIT 3;
+ordem: true
+dica: Falta filtrar o município, ordenar de forma decrescente e limitar a três linhas.
+explicacao: "`ORDER BY ... DESC` com `LIMIT` é o padrão para \"os N maiores\"."
+~~~
+
+## 3. Agrupar e agregar
+
+`GROUP BY` junta as linhas com o mesmo valor e as funções de agregação
+(`COUNT`, `SUM`, `AVG`, `MIN`, `MAX`) resumem cada grupo. `HAVING` filtra
+**depois** de agrupar, enquanto `WHERE` filtra **antes**.
+
+~~~exercicio
+id: m04-contagem
+tipo: sql
+dados: fundiario
+pergunta: |
+  Mostre cada município e a quantidade de lotes dele, numa coluna chamada
+  `imoveis`. Ordene da maior quantidade para a menor e, no empate, pelo nome
+  do município em ordem alfabética.
+inicial: |
+  SELECT municipio
+  FROM lotes;
+solucao: |
+  SELECT municipio, COUNT(*) AS imoveis
+  FROM lotes
+  GROUP BY municipio
+  ORDER BY imoveis DESC, municipio;
+ordem: true
+explicacao: O segundo critério do `ORDER BY` só decide entre linhas empatadas no primeiro.
+~~~
+
+~~~exercicio
+id: m04-having
+tipo: sql
+dados: fundiario
+pergunta: Quais municípios têm **mais de 5.000 ha** somando todos os seus lotes? Mostre o município e a soma.
+inicial: |
+  SELECT municipio, SUM(area_ha) AS area_total
+  FROM lotes
+  GROUP BY municipio;
+solucao: |
+  SELECT municipio, SUM(area_ha) AS area_total
+  FROM lotes
+  GROUP BY municipio
+  HAVING SUM(area_ha) > 5000;
+dica: A condição é sobre a soma, que só existe depois do agrupamento.
+explicacao: "`WHERE area_ha > 5000` filtraria lotes individuais. Para filtrar a soma do grupo, use `HAVING`."
+~~~
+
+## 4. Juntar tabelas
+
+A área de cada lote está em `lotes`, mas o módulo fiscal e a região estão em
+`municipios`. O `JOIN` liga as duas pela coluna comum:
+
+```sql
+SELECT l.id, l.area_ha, m.modulo_fiscal_ha
+FROM lotes AS l
+JOIN municipios AS m ON m.nome = l.municipio;
+```
+
+Com o `JOIN` dá para fazer em SQL a mesma classificação do
+[M0](m00-dominio-fundiario.qmd), usando `CASE WHEN`, que testa as condições na
+ordem, como o `np.select`.
+
+~~~exercicio
+id: m04-regiao
+tipo: sql
+dados: fundiario
+pergunta: Mostre cada `regiao` e a soma da área dos lotes dela (`area_total`), em ordem alfabética de região.
+inicial: |
+  SELECT *
+  FROM lotes AS l
+  JOIN municipios AS m ON m.nome = l.municipio;
+solucao: |
+  SELECT m.regiao, SUM(l.area_ha) AS area_total
+  FROM lotes AS l
+  JOIN municipios AS m ON m.nome = l.municipio
+  GROUP BY m.regiao
+  ORDER BY m.regiao;
+ordem: true
+explicacao: A região vem de `municipios`, a área de `lotes`. O agrupamento é pela coluna da tabela juntada.
+~~~
+
+~~~exercicio
+id: m04-categorias
+tipo: sql
+dados: fundiario
+pergunta: |
+  Classifique cada lote pelo módulo fiscal do seu município e conte quantos
+  lotes há em cada categoria. Use os rótulos `Menor que 1 MF`, `Pequena`,
+  `Média` e `Grande`, numa coluna `categoria`, e a contagem em `imoveis`.
+inicial: |
+  SELECT
+    CASE
+      WHEN l.area_ha < m.modulo_fiscal_ha THEN 'Menor que 1 MF'
+      ELSE 'Outra'
+    END AS categoria,
+    COUNT(*) AS imoveis
+  FROM lotes AS l
+  JOIN municipios AS m ON m.nome = l.municipio
+  GROUP BY categoria;
+solucao: |
+  SELECT
+    CASE
+      WHEN l.area_ha < m.modulo_fiscal_ha THEN 'Menor que 1 MF'
+      WHEN l.area_ha <= 4 * m.modulo_fiscal_ha THEN 'Pequena'
+      WHEN l.area_ha <= 15 * m.modulo_fiscal_ha THEN 'Média'
+      ELSE 'Grande'
+    END AS categoria,
+    COUNT(*) AS imoveis
+  FROM lotes AS l
+  JOIN municipios AS m ON m.nome = l.municipio
+  GROUP BY categoria;
+dica: Acrescente os `WHEN` de 4 e 15 módulos fiscais, com `<=`, na ordem.
+explicacao: É a mesma regra de `classificacao.py`, agora dentro do banco.
+~~~
+
+~~~exercicio
+id: m04-varios-municipios
+tipo: sql
+dados: fundiario
+pergunta: |
+  Que proprietários têm lotes em **mais de um** município? Mostre o
+  `id_proprietario` e a quantidade de municípios distintos (`municipios`),
+  da maior quantidade para a menor e, no empate, pelo pseudônimo.
+inicial: |
+  SELECT id_proprietario, COUNT(*) AS municipios
+  FROM lotes
+  GROUP BY id_proprietario;
+solucao: |
+  SELECT id_proprietario, COUNT(DISTINCT municipio) AS municipios
+  FROM lotes
+  GROUP BY id_proprietario
+  HAVING COUNT(DISTINCT municipio) > 1
+  ORDER BY municipios DESC, id_proprietario;
+ordem: true
+explicacao: |
+  `COUNT(DISTINCT ...)` conta valores diferentes. Esses proprietários são o
+  motivo de o Gini estadual somar as áreas de cada um no estado inteiro, e não
+  município a município.
+~~~
+
+## 5. Índices e planos de execução
+
+Sem índice, para achar os lotes de um município o banco lê a tabela inteira
+(*sequential scan*). Um **índice B-tree** numa coluna funciona como o índice
+remissivo de um livro: o banco vai direto às linhas certas. Um **índice
+único** também impede valores repetidos. Um **índice GIST** organiza
+geometrias por caixas envolventes e acelera as consultas espaciais.
+
+O importador cria os três tipos para a malha fundiária
+([`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py#L896-L898)):
+
+```sql
+CREATE UNIQUE INDEX IF NOT EXISTS idx_malha_fundiaria_ceara_lote_id ON malha_fundiaria_ceara(lote_id);
+CREATE INDEX IF NOT EXISTS idx_malha_fundiaria_ceara_nm_municipio ON malha_fundiaria_ceara(nome_municipio);
+CREATE INDEX IF NOT EXISTS idx_malha_fundiaria_ceara_geometry_31984 ON malha_fundiaria_ceara USING GIST(geometry_31984);
+```
+
+Para saber o que o banco faz de verdade, pergunte a ele:
+
+```sql
+EXPLAIN ANALYZE
+SELECT * FROM malha_fundiaria_ceara WHERE nome_municipio = 'crato';
+```
+
+A saída mostra se usou o índice (`Index Scan`, `Bitmap Index Scan`) ou leu
+tudo (`Seq Scan`) e quanto tempo levou.
+
+::: {.callout-tip}
+## Índice e `ILIKE`
+O miniserver compara nomes sem diferenciar maiúsculas com `ILIKE`. Um índice
+B-tree comum não ajuda `ILIKE`. Se a busca por município ficar lenta, as
+saídas são um índice sobre `lower(nome_municipio)` com consulta por
+`lower(...) = lower(:param)`, ou a extensão `pg_trgm`. Bom tema para medir com
+`EXPLAIN ANALYZE` na prática deste módulo.
+:::
+
+~~~exercicio
+id: m04-gist
+tipo: escolha
+pergunta: Para que serve o índice GIST na coluna `geometry_31984`?
+opcoes:
+  - texto: Acelerar consultas espaciais, como "quais lotes cruzam este polígono"
+    correta: true
+  - texto: Garantir que dois lotes não tenham a mesma geometria
+    explicacao: Isso seria uma restrição de unicidade. O GIST é um índice de busca.
+  - texto: Converter a geometria para metros
+    explicacao: A conversão é feita por `ST_Transform`. O índice só organiza o que já está gravado.
+explicacao: O GIST guarda as caixas envolventes das geometrias numa árvore, e o banco descarta rapidamente o que está longe.
+~~~
+
+## 6. Transações e cargas idempotentes
+
+Uma **transação** agrupa comandos que precisam acontecer juntos: ou todos
+valem (*commit*), ou nenhum (*rollback*). Quem consulta durante a transação
+continua vendo a versão anterior até o commit.
+
+Até a versão 1.1.0, a carga dos assentamentos fazia só `INSERT`. Como o
+container do miniserver roda a carga a cada reinício, duas cargas seguidas
+levavam os assentamentos de 454 para 908. A correção troca a carga inteira
+**dentro de uma única transação**
+([`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py#L254-L270)):
+
+```python
+with engine.begin() as conn:                         # abre a transação
+    conn.execute(text(f"DELETE FROM {TABLE_NAME}"))  # apaga a carga antiga
+    conn.execute(insert_query, records)              # grava a nova
+                                                     # sai do bloco: commit
+```
+
+Se o `INSERT` falhar no meio, o `with` desfaz também o `DELETE`, e a tabela
+continua com os dados antigos. A malha fundiária segue o mesmo padrão e
+acrescenta um **upsert** no `INSERT`: `ON CONFLICT (lote_id) DO UPDATE`, que
+atualiza em vez de duplicar quando o mesmo lote aparece duas vezes no CSV. O
+registro das cargas, que alimenta `/versao_dados`, usa o upsert para manter
+uma linha por tabela:
+
+```sql
+INSERT INTO carga_dados (tabela, registros, concluida_em)
+VALUES (:tabela, :registros, NOW())
+ON CONFLICT (tabela) DO UPDATE SET registros = EXCLUDED.registros, concluida_em = NOW();
+```
+
+~~~exercicio
+id: m04-transacao
+tipo: escolha
+pergunta: |
+  Durante a carga dos assentamentos, o `DELETE` roda e depois o `INSERT`
+  falha na linha 300 por um valor inválido. Com o código da versão 1.2.0, o
+  que fica na tabela?
+opcoes:
+  - texto: Os assentamentos da carga anterior, intactos
+    correta: true
+  - texto: Nada, porque o DELETE já tinha rodado
+    explicacao: O DELETE e o INSERT estão na mesma transação. A falha desfaz os dois.
+  - texto: As 299 primeiras linhas da carga nova
+    explicacao: Uma transação nunca fica pela metade para quem consulta.
+explicacao: É a atomicidade. O painel continua mostrando os dados antigos até uma carga completa dar certo.
+~~~
+
+## 7. As funções PostGIS do projeto
+
+~~~exercicio
+id: m04-funcoes
+tipo: associar
+pergunta: Associe cada função PostGIS ao que ela faz.
+pares:
+  - termo: "`ST_GeomFromText`"
+    definicao: Cria uma geometria a partir de texto WKT
+  - termo: "`ST_SetSRID`"
+    definicao: Declara o sistema de referência sem mexer nas coordenadas
+  - termo: "`ST_Transform`"
+    definicao: Converte as coordenadas para outro sistema de referência
+  - termo: "`ST_Simplify`"
+    definicao: Remove vértices dentro de uma tolerância
+  - termo: "`ST_AsGeoJSON`"
+    definicao: Escreve a geometria como texto GeoJSON
+  - termo: "`ST_Area`"
+    definicao: Mede a área na unidade do sistema de referência
+explicacao: |
+  A diferença entre `ST_SetSRID` e `ST_Transform` é a mais importante:
+  a primeira só rotula, a segunda recalcula. Rotular um dado em 4674 como 4326
+  sem transformar desloca a geometria (pouco, nesse caso, mas desloca).
+~~~
+
+A consulta que monta o GeoJSON de um município no miniserver
+([`_get_geojson`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L158-L186))
+fica assim no PostgreSQL:
+
+```sql
+SELECT ST_AsGeoJSON(ST_Simplify(geometry, 0.001), 6) AS geom_json,
+       "numero_lote", "area", "nome_municipio", ...
+FROM malha_fundiaria_ceara
+WHERE nome_municipio ILIKE :param
+```
+
+### PostgreSQL e SpatiaLite
+
+O miniserver também roda sobre SQLite com a extensão **SpatiaLite**, que é
+como os testes funcionam sem um Postgres de verdade ([M11](m11-testes.qmd)).
+Os dialetos diferem em detalhes, tratados em
+[`_ci_equals` e `_geom_sql`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L102-L115):
+
+| Para | PostgreSQL | SQLite/SpatiaLite |
+|---|---|---|
+| Comparar sem diferenciar maiúsculas | `coluna ILIKE :param` | `LOWER(coluna) = LOWER(:param)` |
+| Gerar GeoJSON | `ST_AsGeoJSON(...)` | `AsGeoJSON(...)` |
+
+~~~exercicio
+id: m04-dialetos
+tipo: multipla
+pergunta: Que consequências tem o fato de os testes do miniserver rodarem sobre SQLite e não sobre PostgreSQL?
+opcoes:
+  - texto: Os testes rodam sem precisar de um servidor de banco, na CI e na sua máquina.
+    correta: true
+  - texto: Um erro de sintaxe que só existe no PostgreSQL pode passar nos testes.
+    correta: true
+  - texto: Os testes garantem que todo SQL funciona igual nos dois bancos.
+    explicacao: Os testes exercitam o caminho do SQLite. O caminho do Postgres, como o `ILIKE`, não é executado.
+  - texto: Vale a pena ter também alguns testes de integração contra um PostGIS real.
+    correta: true
+explicacao: É uma troca consciente entre rapidez e fidelidade. O [M11](m11-testes.qmd) volta a esse ponto.
+~~~
+
+## 8. Operar o banco
+
+| Tarefa | Comando |
+|---|---|
+| Ver se o banco aceita conexões | `pg_isready -U terra -d geodata` (é o healthcheck do container) |
+| Abrir o console SQL | `psql -U terra -d geodata` |
+| Backup em formato compacto | `pg_dump -U terra -d geodata -Fc -f geodata.dump` |
+| Restaurar | `pg_restore -U terra -d geodata --clean geodata.dump` |
+| Trocar a senha de um usuário | `ALTER USER terra WITH PASSWORD '...';` |
+
+Dois cuidados registrados no
+[roteiro de implantação](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md):
+
+- `POSTGRES_PASSWORD` só vale na **criação** do banco. Com o volume já
+  criado, a troca de senha é por SQL (`ALTER USER`).
+- Um volume criado por uma **versão principal** do Postgres (por exemplo, 17)
+  não abre em outra (18). Trocar a versão principal exige `pg_dump` e
+  `pg_restore`.
+
+~~~exercicio
+id: m04-backup
+tipo: texto
+pergunta: Qual opção do `pg_dump` gera o backup no formato personalizado e compacto, o que o `pg_restore` lê?
+respostas:
+  - "-Fc"
+  - "-F c"
+  - "--format=custom"
+  - "--format=c"
+explicacao: "`-Fc` (formato *custom*). O roteiro de implantação usa `pg_dump -Fc` antes de mexer na stack."
+~~~
+
+## No código
+
+- [`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py): criação de tabelas, índices, transações e `registrar_carga`.
+- [`data_service/main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py): as consultas de cada endpoint.
+- [`data_service/db.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/db.py): a conexão com PostgreSQL ou SQLite com SpatiaLite.
+- [`IMPLANTACAO_PORTAINER.md`](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md): backup, volumes e versão do PostGIS.
+
+## Prática no projeto
+
+~~~exercicio
+id: m04-pratica
+tipo: checklist
+pergunta: Com o PostGIS local e os CSVs (peça à coordenação).
+itens:
+  - "Subi um PostGIS local: `podman run -d --name pg-estudo -e POSTGRES_PASSWORD=estudo -p 127.0.0.1:5433:5432 docker.io/postgis/postgis:17-3.5`."
+  - "Carreguei os CSVs com `importer_all.py`, passando `DATABASE_TYPE=postgres POSTGRES_HOST=localhost POSTGRES_PORT=5433 POSTGRES_USER=postgres POSTGRES_PASSWORD=estudo POSTGRES_DB=postgres JWT_SECRET=segredo-local`."
+  - Escrevi as consultas de quantidade de imóveis e área por região e da classificação por módulo fiscal na base real.
+  - "Comparei `ST_Area(geometry_31984) / 10000` com a coluna `area` e investiguei as maiores diferenças."
+  - "Rodei `EXPLAIN ANALYZE` de uma busca por `nome_municipio` com e sem o índice, e com `ILIKE`."
+  - Fiz um `pg_dump -Fc`, apaguei o banco e restaurei com `pg_restore`.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Minicurso de SQL (saia do zero em 1 hora)](https://www.youtube.com/watch?v=dpanYy8IrcU). Código Fonte TV, 1 h, português.
+- [Vídeo]{.selo} [Explorando bancos de dados geográficos: PostGIS](https://www.youtube.com/watch?v=1u498IZHo2k). Leandro França (GeoOne), 2 h 25 min, português.
+- [Vídeo]{.selo} [PostGIS Explained](https://www.youtube.com/watch?v=FKzw9HJ6XYA). Matt Forrest, 19 min, inglês.
+- [Vídeo]{.selo} [Postgres Explain Explained](https://www.youtube.com/watch?v=P7EUFtjeAmI). Hussein Nasser, 10 min, inglês.
+- [Curso]{.selo} [Introduction to PostGIS (workshop)](https://postgis.net/workshops/postgis-intro/). PostGIS, inglês.
+- [Documentação]{.selo} [PostgreSQL](https://www.postgresql.org/docs/current/) e [PostGIS](https://postgis.net/documentation/). Inglês.
+- [Leitura]{.selo} [Using EXPLAIN](https://www.postgresql.org/docs/current/using-explain.html). Documentação do PostgreSQL, inglês.
+- [Livro]{.selo} *PostGIS in Action*, 3ª ed. Regina Obe e Leo Hsu, Manning, inglês.
+- [Documentação]{.selo} [Alembic](https://alembic.sqlalchemy.org): migrações versionadas, o próximo passo planejado para o schema.
+:::

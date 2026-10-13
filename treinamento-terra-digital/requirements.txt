@@ -1,0 +1,9 @@
+# Dependências para validar e testar os exercícios (ferramentas/exercicios.py).
+# O site em si só precisa do Quarto. As bibliotecas abaixo são as mesmas que os
+# exercícios de Python usam no navegador (Pyodide 0.29.3).
+pyyaml==6.0.2
+numpy==2.2.5
+pandas==2.3.3
+shapely==2.0.7
+pyproj==3.7.2
+geopandas==1.1.1

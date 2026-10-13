@@ -1,0 +1,409 @@
+---
+title: "M8 · Mapas web e visualização"
+subtitle: "Folium, camadas, coropletas e gráficos que se leem de primeira"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** dados e painéis, design · **Pré-requisitos:** [M3](m03-geoprocessamento.qmd), [M7](m07-streamlit.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Seis das nove páginas do dashboard são mapas. Um mapa bem feito responde à
+pergunta da página num relance; um mal feito pesa dezenas de megabytes, trava
+o celular de quem consulta e esconde a informação atrás de cores confusas.
+:::
+
+## Objetivos
+
+- Montar um mapa Folium com camada base, camadas vetoriais, legenda e controles.
+- Escolher entre marcadores, agrupamentos e polígonos conforme o volume de dados.
+- Construir um mapa coroplético com classes e cores adequadas.
+- Fazer gráficos com matplotlib do jeito seguro para o Streamlit.
+- Avaliar um mapa ou gráfico com critérios de legibilidade e acessibilidade.
+
+## 1. Como um mapa web funciona
+
+O mapa que aparece no dashboard é desenhado pelo **Leaflet**, uma biblioteca
+JavaScript. O **Folium** é a ponte: você monta o mapa em Python e ele gera o
+HTML e o JavaScript do Leaflet. O **streamlit-folium** põe esse HTML na página
+e devolve ao Python o que a pessoa clicou.
+
+Um mapa tem duas partes:
+
+- a **camada base** (*basemap*): imagens quadradas de 256 pixels, os *tiles*,
+  baixadas de um servidor conforme o zoom e a posição. O endereço tem o
+  formato `.../{z}/{x}/{y}.png`;
+- as **camadas de dados** (*overlays*): os polígonos, linhas e pontos do
+  projeto, que vêm da API em GeoJSON.
+
+## 2. A camada base
+
+O dashboard usa os basemaps da CARTO, que desde 2025 exigem uma chave. Sem a
+chave, cai para o OpenStreetMap
+([`basemap.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/basemap.py#L130-L146)):
+
+```python
+chave = obterChaveCarto()
+if not chave:
+    return _OSM_TILES, _OSM_ATTR
+url = f"{_CARTO_HOST}/{caminho}/" + "{z}/{x}/{y}{r}.png" + f"?key={chave}"
+return url, _CARTO_ATTR
+```
+
+Três detalhes merecem atenção:
+
+- a **atribuição** ("© OpenStreetMap contributors, © CARTO") é obrigatória
+  pelas licenças dos dados e aparece no canto do mapa;
+- o nome da camada é sempre definido à mão. Se o Folium escolhesse, o rótulo
+  no controle de camadas seria a própria URL do tile, **com a chave**;
+- o servidor do OpenStreetMap tem uma política de uso: serve como alternativa,
+  não como fonte principal de um site com muito tráfego.
+
+~~~exercicio
+id: m08-nome-camada
+tipo: escolha
+pergunta: Por que `adicionarBasemap` sempre passa um `name` explícito para a `folium.TileLayer`?
+opcoes:
+  - texto: Sem nome, o controle de camadas mostraria a URL do tile, que contém a chave da CARTO
+    correta: true
+  - texto: Sem nome, o Folium não desenha a camada
+    explicacao: O Folium desenha normalmente; o problema é o rótulo que ele inventa.
+  - texto: O nome é exigido pela licença da CARTO
+    explicacao: A licença exige a atribuição, que é outro campo (`attr`).
+explicacao: Está documentado na docstring de `adicionarBasemap`. Um detalhe de interface que vira questão de segurança.
+~~~
+
+## 3. Camadas de dados
+
+O padrão de uma camada vetorial no projeto
+([`camadasMapa.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/camadasMapa.py#L87-L102)):
+
+```python
+geojson = escaparPropriedades(geojson)        # escape de HTML, sempre (M6)
+tooltip = folium.GeoJsonTooltip(fields=["nome_municipio"], aliases=["Município:"], sticky=True)
+estilo = {"fill": False, "color": COR_MUNICIPIO, "weight": 1}
+folium.GeoJson(geojson, name="Limites Municipais",
+               style_function=lambda _: estilo, tooltip=tooltip).add_to(mapa)
+```
+
+- `style_function` recebe cada *feature* e devolve o estilo dela. É assim que
+  se pinta cada município com uma cor diferente.
+- `GeoJsonTooltip` mostra campos das propriedades ao passar o mouse.
+- `FeatureGroup` agrupa camadas, e o `LayerControl` permite ligar e desligar
+  cada grupo. A legenda das camadas usa `rotuloLegenda`, que põe uma amostra
+  de cor ao lado do nome.
+- `MiniMap` e `Fullscreen` são plugins de navegação que todas as páginas usam
+  (`adicionarControles`).
+
+~~~exercicio
+id: m08-elementos
+tipo: associar
+pergunta: Associe cada elemento do Folium ao papel dele nos mapas do dashboard.
+pares:
+  - termo: "`folium.TileLayer`"
+    definicao: Camada base de imagens, da CARTO ou do OpenStreetMap
+  - termo: "`folium.GeoJson`"
+    definicao: Desenha polígonos e pontos vindos da API
+  - termo: "`style_function`"
+    definicao: Define a cor e a borda de cada feature
+  - termo: "`GeoJsonTooltip`"
+    definicao: Mostra atributos ao passar o mouse
+  - termo: "`LayerControl`"
+    definicao: Liga e desliga grupos de camadas
+explicacao: Quase todos os mapas do projeto combinam esses cinco elementos.
+~~~
+
+## 4. Muitos pontos
+
+Quando há centenas ou milhares de pontos, um marcador para cada um torna o
+mapa ilegível e lento. Os **agrupamentos** juntam os pontos próximos num
+círculo com a contagem, que se abre ao aproximar:
+
+- `MarkerCluster` cria um objeto Python para cada marcador e gera o
+  JavaScript de todos. Bom para dezenas ou poucas centenas;
+- `FastMarkerCluster` recebe só uma lista de linhas (`[lat, lon, tipo,
+  rótulo]`) e uma função JavaScript que monta cada marcador no navegador. É o
+  que os assentamentos usam
+  ([`camadasMapa.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/camadasMapa.py#L35-L44)).
+
+O mapa de predominância usa ainda um `HeatMap`, que mostra densidade em vez
+de pontos individuais.
+
+## 5. O peso do mapa
+
+Todo o GeoJSON de um mapa Folium vai **dentro do HTML** da página. Um
+município com milhares de imóveis pode gerar dezenas de megabytes. Por isso o
+`config.toml` do dashboard aumenta o `maxMessageSize` para 300 MB, e por isso
+o projeto combate o peso em várias frentes:
+
+~~~exercicio
+id: m08-peso
+tipo: multipla
+pergunta: Quais destas medidas o projeto usa para deixar os mapas mais leves?
+opcoes:
+  - texto: Simplificar as geometrias no servidor, com tolerância e casas decimais
+    correta: true
+  - texto: Agrupar pontos com `FastMarkerCluster`
+    correta: true
+  - texto: Pedir os polígonos da malha só para um município ou uma região de cada vez
+    correta: true
+  - texto: Desenhar com `prefer_canvas=True`, mais leve que SVG para muitas formas
+    correta: true
+  - texto: Mandar a malha fundiária do estado inteiro num único GeoJSON
+    explicacao: Seria o contrário. A página da malha exige escolher um recorte.
+explicacao: Simplificação, recortes, agrupamento e renderização em canvas atacam o tamanho e o tempo de desenho.
+~~~
+
+## 6. Mapa coroplético: o Gini por município
+
+Um mapa **coroplético** pinta cada área conforme um valor. A página de
+concentração classifica o Gini em faixas fixas
+([`estiloGini`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L148-L166)),
+com uma regra a mais: município com menos de 200 imóveis ganha uma cor
+própria, porque o índice dele não é confiável.
+
+| Faixa | Cor |
+|---|---|
+| menos de 200 imóveis | `CORES_GINI[0]` |
+| até 0,700 | `CORES_GINI[1]` |
+| 0,701 a 0,800 | `CORES_GINI[2]` |
+| 0,801 a 0,850 | `CORES_GINI[3]` |
+| 0,851 a 0,900 | `CORES_GINI[4]` |
+| acima de 0,900 | `CORES_GINI[5]` |
+
+A paleta `CORES_GINI`, em
+[`public/cores.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/public/cores.py),
+vai do amarelo ao roxo escuro, no estilo da paleta *viridis*: é uma paleta
+**sequencial**, em que mais escuro quer dizer mais concentrado, e a variação de
+claridade ajuda quem tem daltonismo. Já
+as categorias de tamanho usam uma paleta **qualitativa** (`CORES`), porque não
+há ordem de intensidade entre elas.
+
+~~~exercicio
+id: m08-classe-gini
+tipo: python
+pergunta: |
+  Escreva `classeGini(valor, quantidade)` que devolve o **índice** da cor em
+  `CORES_GINI` (0 a 5), seguindo a tabela acima, ou `None` quando o valor
+  faltar (e o município tiver 200 imóveis ou mais).
+inicial: |
+  import math
+
+  LIMITE_MINIMO_IMOVEIS = 200
+
+  def classeGini(valor, quantidade):
+      return 1
+
+  print(classeGini(0.82, 1500))
+solucao: |
+  import math
+
+  LIMITE_MINIMO_IMOVEIS = 200
+
+  def classeGini(valor, quantidade):
+      if quantidade and quantidade < LIMITE_MINIMO_IMOVEIS:
+          return 0
+      if valor is None or (isinstance(valor, float) and math.isnan(valor)):
+          return None
+      if valor <= 0.700:
+          return 1
+      if valor <= 0.800:
+          return 2
+      if valor <= 0.850:
+          return 3
+      if valor <= 0.900:
+          return 4
+      return 5
+
+  print(classeGini(0.82, 1500))
+testes:
+  - nome: poucos imóveis vencem qualquer valor
+    codigo: |
+      assert classeGini(0.95, 150) == 0, classeGini(0.95, 150)
+  - nome: fronteiras de cada faixa
+    codigo: |
+      r = [classeGini(v, 1000) for v in (0.70, 0.80, 0.85, 0.90, 0.901)]
+      assert r == [1, 2, 3, 4, 5], r
+  - nome: valor ausente sem poucos imóveis devolve None
+    codigo: |
+      assert classeGini(float("nan"), 1000) is None and classeGini(None, 1000) is None
+explicacao: |
+  A ordem dos testes importa: a regra dos poucos imóveis vem primeiro, para
+  pintar de amarelo mesmo um município com Gini calculado.
+~~~
+
+~~~exercicio
+id: m08-paleta
+tipo: escolha
+pergunta: Para pintar os municípios pela **área média dos imóveis**, que tipo de paleta é o mais adequado?
+opcoes:
+  - texto: Sequencial, de clara a escura
+    correta: true
+  - texto: Qualitativa, com uma cor bem diferente para cada faixa
+    explicacao: Cores sem ordem visual obrigam o leitor a consultar a legenda para saber o que é "mais".
+  - texto: Arco-íris, do vermelho ao violeta
+    explicacao: O arco-íris não tem ordem perceptível de claridade e confunde quem tem daltonismo.
+explicacao: Valores ordenados pedem cores ordenadas. Paletas divergentes servem quando há um ponto central com significado, como a média estadual.
+~~~
+
+## 7. Interação com o mapa
+
+`st_folium` devolve ao Python o que aconteceu no mapa: o último objeto
+clicado, o zoom, os limites visíveis. Devolver tudo custa uma reexecução a
+cada movimento do mapa, então o projeto só pede o necessário
+([`renderizarMapa`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/camadasMapa.py#L82-L84)):
+
+```python
+st_folium(mapa, height=700, use_container_width=True,
+          returned_objects=list(retornar), key=chave)
+```
+
+A página de concentração pede o último objeto clicado e o tooltip dele, para
+mostrar o Gini do município escolhido. Nas outras cinco páginas de mapa,
+`returned_objects` fica vazio e mexer no mapa não reexecuta o script.
+
+## 8. Gráficos com matplotlib
+
+O dashboard cria os gráficos com `matplotlib.figure.Figure`, **fora do
+`pyplot`**
+([`paginaGraficos.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaGraficos.py#L1-L7)).
+O `pyplot` guarda as figuras num registro global do processo; num servidor com
+várias sessões ao mesmo tempo, isso mistura figuras e vaza memória. Com
+`Figure`, cada gráfico é um objeto independente:
+
+```python
+fig = Figure(figsize=(10, 10))
+ax = fig.subplots()
+ax.bar(categorias, quantidades, color=[CORES[c] for c in categorias])
+buffer = io.BytesIO()
+fig.savefig(buffer, format="png", dpi=150, bbox_inches="tight")
+```
+
+O PNG resultante vai para o cache a partir dos **dados agregados**, que são
+pequenos: quatro categorias e quatro números.
+
+### A curva de Lorenz
+
+A página de concentração mostra o Gini como número. A curva de Lorenz mostra
+de onde ele vem, e é uma boa candidata a gráfico novo (veja o
+[projeto integrador](../projeto-integrador.qmd)).
+
+~~~exercicio
+id: m08-lorenz
+tipo: python
+pergunta: |
+  Escreva `pontosLorenz(areas)`, que devolve duas listas: `x`, a fração
+  acumulada de proprietários, e `y`, a fração acumulada da área, ambas
+  começando em 0 e terminando em 1, com as áreas em ordem crescente.
+inicial: |
+  import numpy as np
+
+  def pontosLorenz(areas):
+      a = np.sort(np.asarray(areas, dtype=float))
+      x = []
+      y = []
+      return x, y
+
+  print(pontosLorenz([1, 2, 3, 4, 10]))
+solucao: |
+  import numpy as np
+
+  def pontosLorenz(areas):
+      a = np.sort(np.asarray(areas, dtype=float))
+      n = a.size
+      x = np.concatenate([[0.0], np.arange(1, n + 1) / n])
+      y = np.concatenate([[0.0], np.cumsum(a) / a.sum()])
+      return list(x), list(y)
+
+  print(pontosLorenz([1, 2, 3, 4, 10]))
+testes:
+  - nome: começa em (0, 0) e termina em (1, 1)
+    codigo: |
+      x, y = pontosLorenz([1, 2, 3, 4, 10])
+      assert abs(x[0]) < 1e-12 and abs(y[0]) < 1e-12 and abs(x[-1] - 1) < 1e-12 and abs(y[-1] - 1) < 1e-12, (x, y)
+  - nome: os pontos do exemplo
+    codigo: |
+      x, y = pontosLorenz([10, 4, 3, 2, 1])
+      esperado = [0, 0.05, 0.15, 0.30, 0.50, 1.0]
+      assert all(abs(a - b) < 1e-9 for a, b in zip(y, esperado)) and len(y) == 6, y
+  - nome: igualdade total é a diagonal
+    codigo: |
+      x, y = pontosLorenz([5, 5, 5, 5])
+      assert all(abs(a - b) < 1e-9 for a, b in zip(x, y)), (x, y)
+explicacao: |
+  Com esses pontos, `ax.plot(x, y)` desenha a curva e `ax.plot([0, 1], [0, 1])`
+  a diagonal da igualdade. O Gini é o dobro da área entre as duas: 0,4 para
+  `[1, 2, 3, 4, 10]`, como no [M2](m02-python-dados.qmd).
+~~~
+
+## 9. Critérios de um bom gráfico ou mapa
+
+- **O título diz a conclusão**, não só o assunto: "No Cariri, 60% dos imóveis
+  têm menos de 1 módulo fiscal" diz mais que "Imóveis por categoria".
+- **Cores com propósito**: sequencial para quantidades, qualitativa para
+  categorias, e contraste suficiente com o fundo.
+- **Não dependa só da cor**: rótulos, padrões ou valores escritos ajudam quem
+  não distingue as cores e quem imprime em preto e branco.
+- **Pizza só com poucas fatias** e proporções bem diferentes. Para comparar
+  quantidades, barras são mais precisas.
+- **Fonte e data dos dados** visíveis, perto do gráfico.
+
+~~~exercicio
+id: m08-critica
+tipo: aberta
+pergunta: |
+  Abra a página "Gráficos e Quadros" do dashboard. Escolha um dos gráficos e
+  escreva uma crítica curta usando os critérios acima: o que funciona, o que
+  você mudaria e por quê.
+resposta: |
+  Pontos que uma boa resposta costuma levantar:
+
+  - se o título resume a conclusão ou só nomeia o assunto;
+  - se a pizza de quatro categorias é legível ou se barras ordenadas seriam
+    mais precisas para comparar;
+  - se as cores da paleta `CORES` têm contraste suficiente entre si e com o
+    fundo, e se há rótulos com os valores;
+  - se o total e a fonte dos dados estão visíveis.
+
+  Leve a crítica para o guia de [designers](../manual/designers.qmd): mudanças
+  de cor e de gráfico entram por pull request.
+~~~
+
+## No código
+
+- [`modules/basemap.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/basemap.py): camada base, chave da CARTO e alternativa OpenStreetMap.
+- [`modules/camadasMapa.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/camadasMapa.py): camadas, legendas e controles compartilhados.
+- [`modules/paginaConcentracao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py): o mapa coroplético do Gini.
+- [`modules/paginaPredominancia.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaPredominancia.py): categorias dominantes e `HeatMap`.
+- [`modules/paginaGraficos.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaGraficos.py): gráficos com `Figure` e cache de PNG.
+- [`public/cores.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/public/cores.py) e [`modules/constantes.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/constantes.py): paletas e cores das camadas.
+
+## Prática no projeto
+
+~~~exercicio
+id: m08-pratica
+tipo: checklist
+pergunta: No ambiente do dashboard.
+itens:
+  - Fiz um mapa coroplético da quantidade de imóveis por município, com tooltip, legenda e atribuição, usando as fixtures de teste.
+  - Comparei tempo de renderização e tamanho do HTML (`mapa.get_root().render()`) com 10 mil pontos em `MarkerCluster` e `FastMarkerCluster`.
+  - "Desenhei a curva de Lorenz de um município com `Figure` e mostrei com `st.image`."
+  - "Rodei o dashboard em `localhost` com `CARTO_API_KEY` vazia e com uma chave qualquer, e expliquei o que aconteceu em cada caso."
+  - Escrevi a crítica de um gráfico do dashboard e conversei sobre ela com alguém de design.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [O tutorial mais completo sobre como criar mapas no Python com Folium](https://www.youtube.com/watch?v=fVBceBb7Eh0). Luana Almeida, 17 min, português.
+- [Vídeo]{.selo} [Leaflet Tutorial 1: create a map with a marker](https://www.youtube.com/watch?v=wVnimcQsuwk). MapTiler, 4 min, inglês.
+- [Vídeo]{.selo} [Visualização de dados com Python: bibliotecas e boas práticas](https://www.youtube.com/watch?v=lNpEnEZkrIY). Alura, 10 min, português.
+- [Documentação]{.selo} [Folium](https://python-visualization.github.io/folium/latest/). Inglês.
+- [Documentação]{.selo} [streamlit-folium](https://folium.streamlit.app). Inglês.
+- [Documentação]{.selo} [Leaflet](https://leafletjs.com/reference.html). Inglês.
+- [Documentação]{.selo} [Matplotlib](https://matplotlib.org/stable/users/index). Inglês.
+- [Ferramenta]{.selo} [ColorBrewer](https://colorbrewer2.org). Paletas para mapas, com filtro para daltonismo, inglês.
+- [Leitura]{.selo} [Política de uso dos tiles do OpenStreetMap](https://operations.osmfoundation.org/policies/tiles/). Inglês.
+- [Livro]{.selo} [Fundamentals of Data Visualization](https://clauswilke.com/dataviz/). Claus Wilke, gratuito, inglês.
+:::

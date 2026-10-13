@@ -1,0 +1,423 @@
+---
+title: "M3 · Fundamentos de geoprocessamento"
+subtitle: "Geometrias, sistemas de referência e simplificação"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** todos os perfis · **Pré-requisitos:** [M2](m02-python-dados.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Cada imóvel, assentamento e município é um polígono. Se o sistema de
+referência estiver errado, a área sai errada e o mapa aparece no meio do
+oceano. Se a simplificação for exagerada, as divisas dos municípios abrem
+frestas; se for tímida, o mapa fica pesado demais para o navegador. Todas essas
+escolhas estão no código do projeto e você vai precisar mexer nelas.
+:::
+
+## Objetivos
+
+- Reconhecer os tipos de geometria e os formatos WKT, WKB e GeoJSON.
+- Escolher o sistema de referência certo para exibir e para medir.
+- Calcular áreas corretamente.
+- Entender o que a simplificação de geometrias ganha e perde.
+- Não trocar latitude com longitude.
+
+## 1. Dados vetoriais
+
+O projeto trabalha com **dados vetoriais**: formas descritas por coordenadas.
+(O outro grande tipo, o *raster*, é uma grade de pixels, como uma imagem de
+satélite; os mapas de fundo da CARTO são raster.) Os tipos que aparecem na base:
+
+| Tipo | Exemplo no projeto |
+|---|---|
+| `Point` | Uma escola do campo; o centro de um reservatório |
+| `Polygon` | O contorno de um imóvel |
+| `MultiPolygon` | Um assentamento formado por áreas separadas; um município com ilhas |
+
+Um polígono é **válido** quando o contorno não cruza a si mesmo e os buracos
+ficam dentro dele. Geometria inválida faz cálculos de área e de interseção
+falharem.
+
+## 2. Formatos
+
+**WKT** (*well-known text*) é a forma legível:
+
+```text
+POINT (-38.5267 -3.7319)
+POLYGON ((-39 -5, -38.99 -5, -38.99 -4.99, -39 -4.99, -39 -5))
+```
+
+O primeiro ponto do polígono se repete no fim, fechando o anel. **WKB** é a
+mesma informação em binário, e o **EWKB**, extensão do PostGIS, inclui o
+código do sistema de referência. Os CSVs da malha fundiária trazem a geometria
+em EWKB hexadecimal, que o importador decodifica com
+`ST_GeomFromEWKB(decode(:geometria, 'hex'))`.
+
+**GeoJSON** é o formato que a API entrega e o Folium desenha:
+
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {"type": "Point", "coordinates": [-38.5267, -3.7319]},
+      "properties": {"nome_municipio": "Fortaleza"}
+    }
+  ]
+}
+```
+
+A especificação do GeoJSON (RFC 7946) fixa duas regras: as coordenadas estão
+em WGS 84 e a ordem é **[longitude, latitude]**.
+
+~~~exercicio
+id: m03-ordem-geojson
+tipo: escolha
+pergunta: "No GeoJSON `\"coordinates\": [-38.5267, -3.7319]`, qual número é a latitude?"
+opcoes:
+  - texto: "`-3.7319`, o segundo"
+    correta: true
+  - texto: "`-38.5267`, o primeiro"
+    explicacao: No GeoJSON a ordem é longitude, latitude, como x e y num plano.
+explicacao: A longitude é o x (leste-oeste) e vem primeiro. Fortaleza fica perto do equador, por isso a latitude é pequena.
+~~~
+
+## 3. Sistemas de referência
+
+Para transformar a Terra, que é quase uma esfera, em números, é preciso
+escolher um **datum** (o modelo da forma da Terra e sua posição) e um **sistema
+de coordenadas**. Cada combinação tem um código **EPSG**. Três aparecem no
+projeto:
+
+| Código | Nome | Unidade | Uso no projeto |
+|---|---|---|---|
+| EPSG:4326 | WGS 84 | graus | Formato de saída da API e do GeoJSON; o que o Folium espera |
+| EPSG:4674 | SIRGAS 2000 | graus | Referência oficial do Brasil; formato de origem dos limites municipais |
+| EPSG:31984 | SIRGAS 2000 / UTM zona 24S | metros | Cálculo de área e distância; o Ceará inteiro cabe na zona 24 |
+
+Os sistemas em **graus** (geográficos) servem para localizar e exibir. Os em
+**metros** (projetados, como o UTM) servem para medir. O importador converte
+os municípios de 4674 para 4326 ao gravar
+([`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py#L563-L568)):
+
+```sql
+ST_Transform(
+    ST_SetSRID(ST_GeomFromEWKB(decode(:geometry, 'hex')), 4674),
+    4326
+)
+```
+
+e a malha fundiária guarda uma segunda coluna, `geometry_31984`, já em metros,
+com índice espacial próprio.
+
+~~~exercicio
+id: m03-epsg
+tipo: associar
+pergunta: Associe cada código ao seu uso no projeto.
+pares:
+  - termo: EPSG:4326
+    definicao: Coordenadas em graus do GeoJSON entregue pela API
+  - termo: EPSG:4674
+    definicao: Referência oficial brasileira em que os limites municipais chegam
+  - termo: EPSG:31984
+    definicao: Coordenadas em metros para calcular áreas no Ceará
+explicacao: Exibir em 4326, medir em 31984. O 4674 é a origem oficial dos dados.
+~~~
+
+## 4. Área: sempre num sistema em metros
+
+Um polígono em EPSG:4326 tem coordenadas em graus, e a "área" calculada
+direto sobre elas sai em **graus quadrados**, uma unidade sem sentido no
+terreno. Um quadrado de 0,01° de lado perto de Quixadá tem área de 0,0001
+grau², mas, projetado em EPSG:31984, mede cerca de **122,5 hectares**.
+
+Com GeoPandas, a conta certa é reprojetar e depois medir:
+
+```python
+limites = gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
+areaHa = limites.to_crs("EPSG:31984").area / 10_000   # m² para hectares
+```
+
+O GeoPandas até avisa (`UserWarning`) quando alguém pede `.area` numa
+geometria em graus.
+
+~~~exercicio
+id: m03-area-utm
+tipo: python
+pergunta: |
+  `lote` é um retângulo em EPSG:31984 (coordenadas em metros). Complete
+  `areaEmHectares(geometria)` para devolver a área em hectares.
+inicial: |
+  from shapely.geometry import Polygon
+
+  lote = Polygon([(500000, 9500000), (501000, 9500000), (501000, 9500500), (500000, 9500500)])
+
+  def areaEmHectares(geometria):
+      return geometria.area
+
+  print(areaEmHectares(lote))
+solucao: |
+  from shapely.geometry import Polygon
+
+  lote = Polygon([(500000, 9500000), (501000, 9500000), (501000, 9500500), (500000, 9500500)])
+
+  def areaEmHectares(geometria):
+      return geometria.area / 10_000
+
+  print(areaEmHectares(lote))
+testes:
+  - nome: o retângulo de 1.000 m por 500 m tem 50 ha
+    codigo: |
+      assert abs(areaEmHectares(lote) - 50) < 1e-6, areaEmHectares(lote)
+  - nome: um quadrado de 100 m de lado tem 1 ha
+    codigo: |
+      quadrado = Polygon([(0, 0), (100, 0), (100, 100), (0, 100)])
+      assert abs(areaEmHectares(quadrado) - 1) < 1e-9, areaEmHectares(quadrado)
+explicacao: Em sistema métrico, `.area` sai em m². Um hectare tem 10.000 m².
+~~~
+
+~~~exercicio
+id: m03-reprojetar
+tipo: python
+pergunta: |
+  `quadrado` está em graus (EPSG:4326). Complete `areaReal(geometria)` para
+  reprojetar para EPSG:31984 com GeoPandas e devolver a área em hectares.
+  (Na primeira execução o navegador baixa o GeoPandas; pode levar uns
+  segundos a mais.)
+inicial: |
+  import geopandas as gpd
+  from shapely.geometry import Polygon
+
+  quadrado = Polygon([(-39, -5), (-38.99, -5), (-38.99, -4.99), (-39, -4.99)])
+
+  def areaReal(geometria):
+      serie = gpd.GeoSeries([geometria], crs="EPSG:4326")
+      return serie.area.iloc[0]   # isto está em graus quadrados!
+
+  print(areaReal(quadrado))
+solucao: |
+  import geopandas as gpd
+  from shapely.geometry import Polygon
+
+  quadrado = Polygon([(-39, -5), (-38.99, -5), (-38.99, -4.99), (-39, -4.99)])
+
+  def areaReal(geometria):
+      serie = gpd.GeoSeries([geometria], crs="EPSG:4326")
+      return serie.to_crs("EPSG:31984").area.iloc[0] / 10_000
+
+  print(areaReal(quadrado))
+testes:
+  - nome: o quadrado de 0,01° perto de Quixadá tem cerca de 122,5 ha
+    codigo: |
+      valor = areaReal(quadrado)
+      assert abs(valor - 122.54) < 0.5, f"deu {valor}"
+explicacao: |
+  Perto do equador, 0,01° de latitude e de longitude valem cerca de 1,1 km
+  cada, daí os 122,5 ha. Mais ao sul, o grau de longitude encolhe e a conta
+  em graus fica ainda mais enganosa.
+~~~
+
+## 5. Simplificação de geometrias
+
+Um polígono de município pode ter milhares de vértices. Mandar todos para o
+navegador deixa o mapa lento e a página pesada. A **simplificação** remove os
+vértices que pouco mudam a forma. O algoritmo clássico, de
+**Douglas-Peucker**, liga o primeiro e o último ponto de uma linha e procura o
+ponto mais distante dessa reta: se a distância for menor que a **tolerância**,
+todos os pontos do meio são descartados; se não, o ponto mais distante fica e
+o processo se repete nos dois lados.
+
+A tolerância está na unidade do sistema de referência. Em EPSG:4326, a
+padrão do projeto, `GEOMETRY_TOLERANCE = 0.001`, vale cerca de 110 m. O
+comentário em
+[`config.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/config.py#L57-L64)
+resume as escolhas: 0,01 só para contornos grosseiros; 0,001 é o valor
+"seguro" para dashboards; 0,0001 quase não simplifica.
+
+Um círculo de 1 km de raio com 257 vértices, simplificado com
+`preserve_topology=True`:
+
+| Tolerância (m) | Vértices | Área (ha) |
+|---|---|---|
+| sem simplificar | 257 | 314,13 |
+| 1 | 129 | 314,03 |
+| 10 | 33 | 312,15 |
+| 100 | 9 | 282,84 |
+
+O PostGIS oferece duas versões:
+
+- `ST_Simplify`: mais rápida, mas pode gerar geometria inválida ou sumir com
+  polígonos pequenos;
+- `ST_SimplifyPreserveTopology`: garante geometria válida. É a usada nos
+  assentamentos e nos reservatórios.
+
+Nenhuma das duas resolve as **divisas**: cada polígono é simplificado
+sozinho, então dois municípios vizinhos podem ganhar frestas ou sobreposições
+entre si. Para isso existe a simplificação de cobertura
+(`ST_CoverageSimplify`, no PostGIS 3.4 ou mais novo).
+
+Já as **casas decimais** (`GEOMETRY_DECIMALS = 6`) cortam a precisão dos
+números no GeoJSON. Seis casas em graus são cerca de 10 cm, mais do que
+suficiente para um mapa na tela, e economizam bytes.
+
+~~~exercicio
+id: m03-tolerancia-metros
+tipo: numero
+pergunta: Aproximadamente quantos **metros** de latitude vale a tolerância padrão de 0,001°?
+resposta: 111
+tolerancia: 6
+unidade: m
+dica: Um grau de latitude tem cerca de 111 km.
+explicacao: 0,001 × 111 km = 111 m. Detalhes menores que isso podem sumir do contorno.
+~~~
+
+~~~exercicio
+id: m03-simplificar
+tipo: python
+pergunta: |
+  Complete `simplificar(geometria, tolerancia)` usando o método `simplify`
+  do Shapely com preservação de topologia, e `contarVertices(poligono)`, que
+  devolve o número de pontos do anel externo.
+inicial: |
+  from shapely.geometry import Point
+
+  circulo = Point(500000, 9500000).buffer(1000, quad_segs=64)
+
+  def simplificar(geometria, tolerancia):
+      return geometria
+
+  def contarVertices(poligono):
+      return 0
+
+  for tolerancia in (1, 10, 100):
+      print(tolerancia, contarVertices(simplificar(circulo, tolerancia)))
+solucao: |
+  from shapely.geometry import Point
+
+  circulo = Point(500000, 9500000).buffer(1000, quad_segs=64)
+
+  def simplificar(geometria, tolerancia):
+      return geometria.simplify(tolerancia, preserve_topology=True)
+
+  def contarVertices(poligono):
+      return len(poligono.exterior.coords)
+
+  for tolerancia in (1, 10, 100):
+      print(tolerancia, contarVertices(simplificar(circulo, tolerancia)))
+testes:
+  - nome: o círculo original tem 257 vértices
+    codigo: |
+      assert contarVertices(circulo) == 257, contarVertices(circulo)
+  - nome: tolerância de 10 m deixa 33 vértices
+    codigo: |
+      assert contarVertices(simplificar(circulo, 10)) == 33, contarVertices(simplificar(circulo, 10))
+  - nome: o resultado continua válido
+    codigo: |
+      assert simplificar(circulo, 100).is_valid
+explicacao: |
+  Cada vértice removido economiza bytes no GeoJSON. O preço aparece na última
+  linha da tabela: com 100 m, o círculo vira um polígono de 8 lados e perde 10%
+  da área.
+~~~
+
+## 6. Latitude e longitude: a troca mais comum
+
+Cada biblioteca tem a sua ordem:
+
+| Onde | Ordem |
+|---|---|
+| GeoJSON, WKT, Shapely (`Point(x, y)`) | longitude, latitude |
+| Folium e Leaflet (`folium.Marker([lat, lon])`) | latitude, longitude |
+
+Por isso a página de hidrografia escreve
+`folium.Marker([centro.y, centro.x], ...)`
+([`paginaHidrografia.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaHidrografia.py#L72-L73)):
+o `y` do Shapely é a latitude.
+
+~~~exercicio
+id: m03-troca
+tipo: escolha
+pergunta: "Alguém escreveu `folium.Marker([centro.x, centro.y])` para um açude em Quixadá (longitude −39,0; latitude −5,0). O que acontece?"
+opcoes:
+  - texto: O marcador aparece no Atlântico Sul, muito longe do Ceará.
+    correta: true
+  - texto: O marcador aparece em Quixadá, porque o Folium corrige a ordem.
+    explicacao: O Folium não adivinha a ordem. Ele lê o primeiro número como latitude.
+  - texto: O Folium lança um erro de coordenada inválida.
+    explicacao: Latitude −39 e longitude −5 são coordenadas válidas, só que no lugar errado.
+explicacao: Latitude −39 e longitude −5 é um ponto no oceano, ao sul e a leste. Nenhum erro aparece, por isso a troca é tão traiçoeira.
+~~~
+
+~~~exercicio
+id: m03-divisas
+tipo: aberta
+pergunta: |
+  Ao simplificar os limites municipais com tolerância de 0,01°, apareceram
+  frestas brancas entre municípios vizinhos no mapa. Explique a causa e
+  proponha duas soluções.
+resposta: |
+  - Causa: cada polígono é simplificado de forma independente. A divisa
+    comum perde vértices diferentes em cada lado, e as duas versões deixam
+    de coincidir.
+  - Solução 1: usar uma tolerância menor (0,001°), reduzindo o problema ao
+    ponto de ficar invisível na escala do mapa.
+  - Solução 2: simplificar a cobertura inteira de uma vez, preservando as
+    divisas compartilhadas (`ST_CoverageSimplify` no PostGIS 3.4+, ou
+    ferramentas topológicas como o TopoJSON/mapshaper), e guardar o
+    resultado pronto.
+~~~
+
+## 7. GeoPandas no dashboard
+
+O dashboard transforma o GeoJSON da API num `GeoDataFrame`, um DataFrame com
+uma coluna de geometria e um sistema de referência
+([`carregarLimitesMunicipaisGdf`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py#L109-L116)):
+
+```python
+gpd.GeoDataFrame.from_features(features, crs="EPSG:4326")
+```
+
+A partir daí, tudo o que você aprendeu no M2 vale, mais operações espaciais:
+`to_crs`, `area`, `centroid`, `merge` com dados tabulares (como o Gini por
+município) e `explore()`, que abre o GeoDataFrame num mapa interativo dentro
+do notebook.
+
+## No código
+
+- [`terraGeoDataMiniServer/config.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/config.py#L57-L64): tolerância e casas decimais padrão.
+- [`data_service/main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L108-L115): `_geom_sql`, que monta `ST_AsGeoJSON(ST_Simplify(...))`.
+- [`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py#L860-L900): a tabela da malha com `geometry_31984` e índice GIST.
+- [`modules/paginaHidrografia.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaHidrografia.py): centroides e a ordem latitude, longitude no Folium.
+
+## Prática no projeto
+
+~~~exercicio
+id: m03-pratica
+tipo: checklist
+pergunta: Num notebook no ambiente do dashboard.
+itens:
+  - Carreguei o GeoJSON de municípios das fixtures de teste (`tests/conftest.py`) num GeoDataFrame.
+  - Calculei a área de cada município em EPSG:4326 e em EPSG:31984 e expliquei a diferença.
+  - Simplifiquei um município com as tolerâncias 0,01; 0,001; 0,0005 e 0,0001 e registrei vértices e tamanho do GeoJSON em bytes.
+  - Simplifiquei dois municípios vizinhos e mostrei as frestas na divisa com `explore()`.
+  - Abri um CSV com WKT no QGIS e conferi o sistema de referência da camada.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Descomplicando: DATUM e Sistemas de Coordenadas](https://www.youtube.com/watch?v=YW8lwn8L6rA). Anderson Medeiros (ClickGeo), 10 min, português.
+- [Vídeo]{.selo} [Descomplicando Sistemas de Referência Espacial](https://www.youtube.com/watch?v=D_I-aTtV4Qk). Anderson Medeiros (ClickGeo), 34 min, português.
+- [Vídeo]{.selo} [Projeções cartográficas: plana, cônica e cilíndrica](https://www.youtube.com/watch?v=L1kJd4YFeAg). Geo Ilustrada, 5 min, português.
+- [Vídeo]{.selo} [Manipulando dados geoespaciais com GeoPandas, parte 1](https://www.youtube.com/watch?v=MSFdG3Po1OI). Synapse Data Science, 17 min, português.
+- [Vídeo]{.selo} [Ramer-Douglas-Peucker explained](https://www.youtube.com/watch?v=SbVXh5VtxKw). Derick Rethans, 5 min, inglês.
+- [Vídeo]{.selo} [RDP Line Simplification Algorithm](https://www.youtube.com/watch?v=nSYw9GrakjY). The Coding Train, 28 min, inglês.
+- [Leitura]{.selo} [RFC 7946: The GeoJSON Format](https://datatracker.ietf.org/doc/html/rfc7946). IETF, inglês.
+- [Leitura]{.selo} [EPSG:31984](https://epsg.io/31984) e [EPSG:4674](https://epsg.io/4674). Inglês.
+- [Documentação]{.selo} [Guia do GeoPandas](https://geopandas.org/en/stable/docs/user_guide.html) e [Shapely](https://shapely.readthedocs.io/en/stable/). Inglês.
+- [Livro]{.selo} [Geographic Data Science with Python](https://geographicdata.science/book/). Rey, Arribas-Bel e Wolf, gratuito, inglês.
+- [Ferramenta]{.selo} [QGIS](https://qgis.org). SIG livre para inspecionar camadas e o banco PostGIS.
+:::

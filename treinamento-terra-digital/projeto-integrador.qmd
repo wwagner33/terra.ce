@@ -1,0 +1,152 @@
+---
+title: "Projeto integrador"
+subtitle: "Duas semanas para resolver uma pendência real da plataforma, entregue por pull request"
+---
+
+Nas semanas 11 e 12, cada pessoa (ou dupla, nos projetos maiores) escolhe uma
+pendência real da Plataforma Terra.Ce, resolve, abre o pull request e
+apresenta o resultado. É o momento de juntar tudo: o domínio, o código, os
+testes, a segurança, a documentação e o fluxo de contribuição.
+
+## As opções
+
+| Projeto | Tamanho | Perfil | Módulos |
+|---|---|---|---|
+| [Carregador de Dados](#carregador-de-dados) | grande, em dupla | backend, infraestrutura | M4, M9, M14 |
+| [Escolas do campo no banco](#escolas-do-campo-no-banco) | médio | backend, dados | M4, M5, M7, M9 |
+| [CI do miniserver com PostGIS real](#ci-do-miniserver-com-postgis-real) | médio | infraestrutura | M11, M15 |
+| [Rotas `/v1` e limite de requisições](#rotas-v1-e-limite-de-requisições) | médio | backend | M5, M6, M7 |
+| [Imagens sem terceiros e contraste](#imagens-sem-terceiros-e-contraste) | pequeno | design | M6, M7, M8 |
+| [Curva de Lorenz por município](#curva-de-lorenz-por-município) | médio | dados e painéis | M2, M7, M8 |
+| [CSVs fora da imagem do miniserver](#csvs-fora-da-imagem-do-miniserver) | pequeno | infraestrutura | M13, M14 |
+| [Benchmark corrigido e medido](#benchmark-corrigido-e-medido) | pequeno | dados e painéis | M10, M11 |
+| [Documentação viva](#documentação-viva) | pequeno | todos | M12 |
+| [Avaliação do Terra-AI](#avaliação-do-terra-ai) | médio | IA | M11, M16 |
+
+Outras pendências do
+[plano de melhoria](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md)
+também valem, combinadas com a coordenação.
+
+### Carregador de Dados
+
+Tirar os importadores do container do miniserver e criar um serviço próprio
+na stack, como decidido pela equipe ([M9](modulos/m09-engenharia-dados.qmd)).
+
+- **Entrega**: um container que roda `importer_from_geoapi.py` e
+  `importer_all.py`, agendável e sob demanda, registrando em `carga_dados`; o
+  miniserver com `IMPORTAR_DADOS_NA_INICIALIZACAO=false`; o compose
+  atualizado; um ADR com a decisão.
+- **Pronto quando**: duas cargas seguidas deixam as mesmas contagens, o
+  miniserver sobe em segundos e o dashboard mostra a carga nova sozinho.
+
+### Escolas do campo no banco
+
+A página Escolas do Campo usa uma lista fixa no código
+(`ESCOLAS_DO_CAMPO` em `paginaEscolasCampo.py`), embora o arquivo
+`datasets/escolas_do_campo.csv` exista.
+
+- **Entrega**: importação do CSV numa tabela, endpoint
+  `/escolas_campo` no miniserver, página do dashboard lendo pelo
+  `repositorio`, testes nos dois lados.
+- **Pronto quando**: a página mostra as mesmas escolas de hoje, vindas da API,
+  e a lista fixa saiu do código.
+
+### CI do miniserver com PostGIS real
+
+- **Entrega**: `.github/workflows/testes.yml` no miniserver (lint e testes
+  com SpatiaLite) e um job separado com um PostGIS como serviço, rodando a
+  carga com CSVs sintéticos e testando os caminhos exclusivos do Postgres.
+- **Pronto quando**: os dois jobs ficam verdes num pull request e vermelhos
+  quando um erro de propósito é introduzido.
+
+### Rotas `/v1` e limite de requisições
+
+Dois itens de `otimizacoes.md` do miniserver.
+
+- **Entrega**: rotas sob `/v1` com `APIRouter`, mantendo as antigas por um
+  período; limite de requisições por cliente; dashboard e Terra-AI migrados;
+  nota de versão explicando a transição.
+- **Pronto quando**: os testes cobrem as rotas novas e antigas, e um cliente
+  que exceda o limite recebe 429.
+
+### Imagens sem terceiros e contraste
+
+As páginas Início e Sobre carregam imagens de `i.imgur.com` e do site do
+IDACE (achado S8), e o laranja dos rótulos não tem contraste suficiente.
+
+- **Entrega**: imagens otimizadas em `assets/`, com texto alternativo e
+  créditos; cores ajustadas com as razões de contraste documentadas no PR.
+- **Pronto quando**: nenhuma requisição a domínio de terceiros para imagens
+  (confira na aba Rede do navegador) e todo texto com contraste AA.
+
+### Curva de Lorenz por município
+
+- **Entrega**: na página de concentração, a curva de Lorenz do município
+  selecionado, com a diagonal da igualdade, o Gini e uma explicação em
+  linguagem simples; funções de cálculo testadas.
+- **Pronto quando**: o Gini mostrado bate com a área sob a curva e a página
+  continua leve com cache.
+
+### CSVs fora da imagem do miniserver
+
+O `.dockerignore` do miniserver não exclui `datasets/`, e os CSVs com nomes de
+pessoas físicas entram na imagem ([M13](modulos/m13-lgpd.qmd)).
+
+- **Entrega**: `.dockerignore` corrigido, um teste de higiene como o do
+  dashboard, e um roteiro para a coordenação publicar a imagem nova e remover
+  as tags antigas. Enquanto a carga estiver no miniserver, os CSVs precisam
+  chegar ao container por volume, e não pela imagem.
+- **Pronto quando**: `podman run --rm --entrypoint ls <imagem> datasets` falha
+  na imagem nova e a carga continua funcionando.
+
+### Benchmark corrigido e medido
+
+- **Entrega**: `tests/benchPaginas.py` usando a navegação atual
+  ([M10](modulos/m10-desempenho-cache.qmd)), um relatório com os tempos de
+  cada página e uma proposta para a mais lenta.
+- **Pronto quando**: o benchmark mede as nove páginas de verdade e o
+  relatório está no PR.
+
+### Documentação viva
+
+- **Entrega**: diagramas PlantUML atualizados para a 1.2.0 (arquitetura,
+  classes e casos de uso) e uma decisão sobre o `doc/spec.yaml` versus o
+  `/openapi.json`, implementada.
+- **Pronto quando**: nenhum diagrama cita componentes que não existem e o
+  contrato da API não pode mais divergir do código.
+
+### Avaliação do Terra-AI
+
+- **Entrega**: um conjunto de pelo menos 30 perguntas com o comportamento
+  esperado e um script que roda todas, confere se cada número da resposta
+  aparece nos resultados das ferramentas e gera um relatório
+  ([M16](modulos/m16-terra-ai.qmd)).
+- **Pronto quando**: o relatório roda com um comando e aponta pelo menos uma
+  melhoria concreta no prompt ou nas ferramentas.
+
+## Como avaliar
+
+| Critério | Insuficiente | Adequado | Excelente |
+|---|---|---|---|
+| **Funciona** | CI vermelha ou critério de pronto não atingido | CI verde e critério atingido | e casos de borda cobertos |
+| **Testes** | sem teste novo | testes da mudança | testes que pegariam regressões nas fronteiras |
+| **Segurança e LGPD** | segredo ou dado pessoal no diff ou nos prints | nada exposto | e o PR melhora alguma proteção |
+| **Código** | fora das convenções, difícil de ler | convenções seguidas | simples, com comentários que explicam o porquê |
+| **Documentação** | nada atualizado | README ou roteiro atualizado | e decisão registrada (ADR ou plano) |
+| **Comunicação** | PR sem descrição | descrição com o que, por quê e como testar | e apresentação clara, com alternativas descartadas |
+
+## Entrega
+
+~~~exercicio
+id: integrador-entrega
+tipo: checklist
+pergunta: Antes da apresentação.
+itens:
+  - Escolhi o projeto com a coordenação e abri (ou comentei) a issue.
+  - Trabalhei numa branch com commits pequenos e o PR aberto como rascunho desde o começo.
+  - CI verde, com testes novos para a mudança.
+  - Nenhum segredo ou dado pessoal no diff, nos logs ou nos prints.
+  - Documentação atualizada e, se houve decisão de arquitetura, um ADR.
+  - Respondi a todos os comentários da revisão.
+  - "Preparei 15 minutos de apresentação: problema, decisão, alternativas descartadas e demonstração."
+~~~

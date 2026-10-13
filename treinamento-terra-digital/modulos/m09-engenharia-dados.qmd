@@ -1,0 +1,418 @@
+---
+title: "M9 · Engenharia de dados"
+subtitle: "Coleta, transformação e carga, do IDACE até o painel"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** backend e banco · **Recomendado para:** dados e painéis, infraestrutura · **Pré-requisitos:** [M4](m04-postgis.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Um painel só é tão bom quanto os dados que chegam a ele. O caminho entre a
+GeoAPI do IDACE e o mapa tem várias etapas, e cada uma já deu problema: a API
+fora do ar, páginas repetidas, números com vírgula, registros duplicados a
+cada reinício. A equipe decidiu separar a carga num serviço próprio, o
+**Carregador de Dados**, e quem fizer esse trabalho precisa dominar este
+módulo.
+:::
+
+## Objetivos
+
+- Descrever o caminho dos dados de ponta a ponta.
+- Coletar de uma API de forma resiliente: paginação, tempo limite e novas tentativas.
+- Limpar e normalizar dados sem perder informação.
+- Fazer cargas idempotentes e rastreáveis.
+- Avaliar o acoplamento entre a carga e o miniserver.
+
+## 1. O caminho dos dados
+
+```{mermaid}
+%%| fig-cap: "Do cadastro do IDACE ao cache do dashboard."
+flowchart TB
+    api["GeoAPI do IDACE"] -->|"importer_from_geoapi.py<br/>coleta por município"| bruto["CSV bruto da malha"]
+    bruto -->|"acrescenta módulos<br/>fiscais e regiões"| csv["malha_fundiaria_ceara.csv"]
+    outros["outros CSVs: municípios,<br/>assentamentos, reservatórios"] --> imp
+    csv --> imp["importer_all.py"]
+    imp -->|"uma transação<br/>por tabela"| pg[("PostGIS")]
+    imp -->|"registrar_carga"| cargas[("carga_dados")]
+    cargas -->|"/versao_dados"| dash["dashboard limpa o cache"]
+```
+
+É um processo **ETL**: *extract* (extrair da fonte), *transform* (limpar,
+converter, enriquecer) e *load* (carregar no banco). Roda em **lote**: a
+carga completa é refeita, e a combinação com o IDACE é de uma atualização por
+mês.
+
+~~~exercicio
+id: m09-ordem
+tipo: ordenar
+pergunta: Ordene as etapas para um dado novo do IDACE aparecer no dashboard.
+itens:
+  - O importador da GeoAPI coleta a malha de cada município
+  - O CSV é enriquecido com módulos fiscais e regiões
+  - O importer_all.py troca o conteúdo da tabela numa transação
+  - A carga é registrada na tabela carga_dados
+  - O dashboard percebe a versão nova em /versao_dados e limpa o cache
+explicacao: A última etapa acontece em até 5 minutos depois da carga, pelo `TTL_VERSAO` do dashboard.
+~~~
+
+## 2. Extrair: coleta resiliente
+
+A GeoAPI entrega os imóveis de um município em páginas. O cliente
+([`importer_from_geoapi.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_from_geoapi.py#L157-L190))
+pede página por página e se protege de três jeitos:
+
+- **para quando a página vem incompleta ou vazia**, sinal de que acabou;
+- **para se a API repetir a mesma página**, o que já aconteceu quando ela
+  ignorava o parâmetro de paginação. Sem isso, o laço não terminaria;
+- **limita o número de páginas** (`LIMITE_PAGINAS = 500`), como última garantia.
+
+Cada requisição tem **tempo limite** de 120 segundos e **novas tentativas**
+com a biblioteca `tenacity`
+([trecho](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_from_geoapi.py#L194-L203)):
+
+```python
+@retry(
+    stop=stop_after_attempt(5),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    retry=retry_if_exception(_deve_repetir),
+    reraise=True,
+)
+def fetch_data(self, municipio, pagina=0, tamanho=10000): ...
+```
+
+A espera cresce a cada falha (**backoff exponencial**): repetir na hora contra
+um servidor sobrecarregado só piora a situação. E nem toda falha merece nova
+tentativa:
+
+```python
+def _deve_repetir(erro):
+    """Repete só falhas transitórias: rede, timeout e erro 5xx."""
+    if isinstance(erro, (requests.exceptions.ConnectionError, requests.exceptions.Timeout)):
+        return True
+    if isinstance(erro, requests.exceptions.HTTPError) and erro.response is not None:
+        return erro.response.status_code >= 500
+    return False
+```
+
+Um 401 (token inválido) ou um 404 não vão melhorar na quinta tentativa: falham
+logo, com a mensagem certa.
+
+~~~exercicio
+id: m09-deve-repetir
+tipo: python
+pergunta: |
+  Escreva `deveRepetir(status)`, versão simplificada da regra: `status` é o
+  código HTTP da resposta, ou `None` quando a conexão falhou ou o tempo
+  esgotou. Repita em falha de conexão, em 5xx **e também em 429** (excesso de
+  requisições), que hoje o importador não repete.
+inicial: |
+  def deveRepetir(status):
+      return status is None
+
+  print([deveRepetir(s) for s in (None, 200, 401, 429, 502)])
+solucao: |
+  def deveRepetir(status):
+      if status is None:
+          return True
+      return status == 429 or status >= 500
+
+  print([deveRepetir(s) for s in (None, 200, 401, 429, 502)])
+testes:
+  - nome: falha de conexão é repetida
+    codigo: |
+      assert deveRepetir(None) is True
+  - nome: erros 5xx são repetidos
+    codigo: |
+      assert all(deveRepetir(s) for s in (500, 502, 503, 504)), [deveRepetir(s) for s in (500, 502, 503, 504)]
+  - nome: 429 é repetido
+    codigo: |
+      assert deveRepetir(429) is True, "429 quer dizer 'espere e tente de novo'"
+  - nome: 4xx de cliente não são repetidos
+    codigo: |
+      assert not any(deveRepetir(s) for s in (400, 401, 403, 404)), [deveRepetir(s) for s in (400, 401, 403, 404)]
+explicacao: |
+  O 429 é transitório por definição. O ideal é ainda respeitar o cabeçalho
+  `Retry-After`, quando a API o manda, em vez do backoff padrão. Acrescentar
+  isso ao importador é uma boa melhoria.
+~~~
+
+~~~exercicio
+id: m09-espera-total
+tipo: numero
+pergunta: |
+  Com `stop_after_attempt(5)` e `wait_exponential(multiplier=1, min=2, max=30)`,
+  as esperas depois das tentativas 1, 2, 3 e 4 são `max(2, min(2^(n−1), 30))`
+  segundos. Quantos segundos de espera, no total, até a quinta e última tentativa?
+resposta: 16
+unidade: s
+dica: "As esperas são 2^0, 2^1, 2^2 e 2^3, cada uma com piso de 2 e teto de 30."
+explicacao: "1 vira 2 (piso), depois 2, 4 e 8: total de 16 s. Somado ao tempo limite de 120 s por tentativa, um município com a API fora do ar pode levar mais de 10 minutos."
+~~~
+
+## 3. Transformar: limpar sem inventar
+
+Os CSVs chegam com números em formatos variados, células vazias, "nan" e
+"NULL" escritos como texto. O importador converte tudo com funções pequenas
+e testáveis
+([`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py#L31-L90)):
+
+```python
+def parse_float(value):
+    if _is_nullish(value):            # "", "null", "none", "na", "n/a", "nan"
+        return None
+    s = str(value).strip().replace(" ", "")
+    if "," in s and "." in s:         # 1.234,56 → 1234.56
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s:                    # 12,5 → 12.5
+        s = s.replace(",", ".")
+    return float(s)
+```
+
+Valor que não pode ser lido vira `None` e gera um aviso no log, em vez de
+derrubar a carga inteira ou virar zero silenciosamente.
+
+~~~exercicio
+id: m09-ler-decimal
+tipo: python
+pergunta: |
+  Implemente `lerDecimal(valor)` com as regras do `parse_float`: vazio ou
+  marcadores de ausência viram `None`; vírgula decimal e ponto de milhar
+  são aceitos; o que não for número vira `None`.
+inicial: |
+  AUSENTES = {"", "null", "none", "na", "n/a", "nan"}
+
+  def lerDecimal(valor):
+      return float(valor)
+
+  print(lerDecimal("1.234,56"))
+solucao: |
+  AUSENTES = {"", "null", "none", "na", "n/a", "nan"}
+
+  def lerDecimal(valor):
+      if valor is None or str(valor).strip().lower() in AUSENTES:
+          return None
+      texto = str(valor).strip().replace(" ", "")
+      if "," in texto and "." in texto:
+          texto = texto.replace(".", "").replace(",", ".")
+      elif "," in texto:
+          texto = texto.replace(",", ".")
+      try:
+          return float(texto)
+      except ValueError:
+          return None
+
+  print(lerDecimal("1.234,56"))
+testes:
+  - nome: formatos brasileiros
+    codigo: |
+      assert lerDecimal("1.234,56") == 1234.56 and lerDecimal("12,5") == 12.5, (lerDecimal("1.234,56"), lerDecimal("12,5"))
+  - nome: ponto decimal continua funcionando
+    codigo: |
+      assert lerDecimal("12.5") == 12.5 and lerDecimal(7) == 7.0
+  - nome: ausências viram None
+    codigo: |
+      assert all(lerDecimal(v) is None for v in (None, "", "  ", "NaN", "NULL", "n/a")), [lerDecimal(v) for v in (None, "", "  ", "NaN", "NULL", "n/a")]
+  - nome: texto inválido vira None, sem erro
+    codigo: |
+      assert lerDecimal("doze") is None, lerDecimal("doze")
+explicacao: |
+  Repare numa ambiguidade que a regra não resolve: "1.234" sem vírgula vira
+  1,234, e não mil duzentos e trinta e quatro. Por isso é importante saber o
+  formato de cada fonte e testar com amostras reais.
+~~~
+
+### Duplicatas e normalização
+
+Na carga dos assentamentos, a chave de um registro é o par (código SIPRA,
+município). Registros repetidos no CSV são contados e descartados, e os
+detalhes vão para o relatório da carga. Nomes de município são normalizados
+(sem acento, minúsculas) para comparar fontes diferentes, e o nome original
+fica numa coluna à parte (`nome_municipio_original`) para exibição.
+
+~~~exercicio
+id: m09-duplicatas
+tipo: python
+pergunta: |
+  Escreva `removerDuplicatas(registros)`, que mantém a **primeira**
+  ocorrência de cada chave `(cd_sipra, municipio)` e devolve a lista limpa e
+  a quantidade de duplicatas descartadas.
+inicial: |
+  def removerDuplicatas(registros):
+      return registros, 0
+
+  dados = [
+      {"cd_sipra": "CE0001", "municipio": "quixada", "familias": 42},
+      {"cd_sipra": "CE0002", "municipio": "crato", "familias": 51},
+      {"cd_sipra": "CE0001", "municipio": "quixada", "familias": 40},
+  ]
+  print(removerDuplicatas(dados))
+solucao: |
+  def removerDuplicatas(registros):
+      vistos = set()
+      limpos = []
+      duplicatas = 0
+      for registro in registros:
+          chave = (registro["cd_sipra"], registro["municipio"])
+          if chave in vistos:
+              duplicatas += 1
+              continue
+          vistos.add(chave)
+          limpos.append(registro)
+      return limpos, duplicatas
+
+  dados = [
+      {"cd_sipra": "CE0001", "municipio": "quixada", "familias": 42},
+      {"cd_sipra": "CE0002", "municipio": "crato", "familias": 51},
+      {"cd_sipra": "CE0001", "municipio": "quixada", "familias": 40},
+  ]
+  print(removerDuplicatas(dados))
+testes:
+  - nome: descarta a repetição e conta
+    codigo: |
+      limpos, n = removerDuplicatas(dados)
+      assert len(limpos) == 2 and n == 1, (limpos, n)
+  - nome: mantém a primeira ocorrência
+    codigo: |
+      limpos, _ = removerDuplicatas(dados)
+      assert limpos[0]["familias"] == 42, limpos
+  - nome: mesmo código em municípios diferentes não é duplicata
+    codigo: |
+      limpos, n = removerDuplicatas([{"cd_sipra": "X", "municipio": "a"}, {"cd_sipra": "X", "municipio": "b"}])
+      assert n == 0 and len(limpos) == 2, (limpos, n)
+explicacao: Uma chave bem escolhida é metade da qualidade dos dados. A outra metade é registrar o que foi descartado, para alguém conferir.
+~~~
+
+## 4. Carregar: idempotência
+
+Uma operação é **idempotente** quando rodá-la duas vezes dá o mesmo resultado
+que rodá-la uma vez. Para uma carga, isso significa: se o processo rodar de
+novo, por um reinício do container ou por engano, o banco fica igual.
+
+Até a versão 1.1.0, três das cinco tabelas faziam só `INSERT`, e o container
+do miniserver roda a carga a cada inicialização. Duas cargas seguidas
+levaram os assentamentos de 454 para 908, os reservatórios de 157 para 314 e as
+regiões de 184 para 368 (bug B10). A correção, que você viu no
+[M4](m04-postgis.qmd), apaga e regrava cada tabela **na mesma transação**.
+
+Depois de cada tabela carregada com sucesso, `registrar_carga` grava o nome da
+tabela, a quantidade de registros e a hora na tabela `carga_dados`. O endpoint
+`/versao_dados` devolve a hora mais recente, e o dashboard usa esse valor para
+saber que precisa limpar o cache ([M10](m10-desempenho-cache.qmd)).
+
+~~~exercicio
+id: m09-idempotente
+tipo: multipla
+pergunta: Quais destas operações são idempotentes?
+opcoes:
+  - texto: Apagar a tabela e regravar o CSV inteiro, numa transação
+    correta: true
+  - texto: "`INSERT ... ON CONFLICT (lote_id) DO UPDATE` com os mesmos dados"
+    correta: true
+  - texto: "`INSERT` simples dos registros do CSV"
+    explicacao: Cada execução acrescenta as linhas de novo. Foi o bug B10.
+  - texto: "Uma requisição `GET /regioes`"
+    correta: true
+  - texto: Somar 1 ao contador de visitas
+    explicacao: Duas execuções somam 2.
+explicacao: GET, PUT e DELETE devem ser idempotentes em HTTP; POST não precisa ser. A mesma ideia vale para cargas de dados.
+~~~
+
+## 5. Acoplamento: a carga dentro do miniserver
+
+Hoje o `entrypoint.sh` do miniserver roda o `importer_all.py` antes de subir a
+API:
+
+```bash
+if [ "${IMPORTAR_DADOS_NA_INICIALIZACAO:-true}" == "true" ]; then
+    python importer_all.py
+fi
+exec gunicorn data_service.main:app ...
+```
+
+~~~exercicio
+id: m09-acoplamento
+tipo: multipla
+pergunta: Que problemas vêm de rodar a carga a cada inicialização do container da API?
+opcoes:
+  - texto: A API fica de 2 a 5 minutos sem responder a cada reinício
+    correta: true
+  - texto: Uma falha da carga pode impedir a API de subir, mesmo com os dados antigos íntegros no banco
+    correta: true
+  - texto: A imagem da API precisa levar os CSVs, que têm dados pessoais
+    correta: true
+  - texto: Não dá para agendar a carga mensal sem reiniciar a API
+    correta: true
+  - texto: A carga fica mais rápida por rodar perto do banco
+    explicacao: Um serviço separado na mesma rede fica tão perto do banco quanto o miniserver.
+explicacao: |
+  Por isso a decisão de criar o **Carregador de Dados**: um serviço próprio,
+  que coleta e carrega no horário certo, e um miniserver que só serve a API,
+  com `IMPORTAR_DADOS_NA_INICIALIZACAO=false`.
+~~~
+
+O plano de separação tem seis passos: tornar as cargas idempotentes (feito na
+1.2.0), resolver a invalidação dos caches (feito, com `/versao_dados`), criar e
+testar o serviço carregador, tirar a carga do `entrypoint.sh`, unificar os
+arquivos de compose e adotar migrações versionadas com Alembic.
+
+~~~exercicio
+id: m09-adr
+tipo: aberta
+pergunta: |
+  Esboce uma decisão de arquitetura (ADR) para o Carregador de Dados: o que
+  ele faz, quando roda, como o miniserver e o dashboard ficam sabendo da carga
+  nova e como se desfaz uma carga ruim.
+resposta: |
+  Uma boa resposta cobre:
+
+  - **Responsabilidade**: coletar da GeoAPI, ler os CSVs, transformar,
+    carregar e registrar em `carga_dados`. O miniserver deixa de ter os
+    importadores.
+  - **Agendamento**: um container próprio na stack, disparado por cron (ou
+    agendador do Portainer) uma vez por mês, e também sob demanda.
+  - **Aviso**: nenhum aviso direto é necessário. A carga grava em
+    `carga_dados`, o `/versao_dados` muda e o dashboard limpa o cache sozinho.
+    O cache de listas do miniserver expira em 10 minutos.
+  - **Reversão**: `pg_dump` antes da carga, ou carregar em tabelas de
+    preparação e trocar por `ALTER TABLE ... RENAME` só se as verificações de
+    qualidade passarem (contagens, duplicatas, geometrias válidas).
+  - **Alternativas descartadas**, com o porquê, e as **consequências**.
+~~~
+
+## No código
+
+- [`importer_from_geoapi.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_from_geoapi.py): coleta, paginação e novas tentativas.
+- [`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py): conversões, duplicatas, transações e `registrar_carga`.
+- [`entrypoint.sh`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/entrypoint.sh): a carga na inicialização.
+- [`tests/test_importer_geoapi.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_importer_geoapi.py) e [`tests/test_versao_dados.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_versao_dados.py).
+- [`modules/repositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py#L48-L81): `sincronizarVersaoDados` no dashboard.
+
+## Prática no projeto
+
+~~~exercicio
+id: m09-pratica
+tipo: checklist
+pergunta: Com o PostGIS local do M4.
+itens:
+  - "Rodei `importer_all.py` duas vezes seguidas e mostrei, com `SELECT COUNT(*)`, que as contagens não mudam."
+  - "Consultei `carga_dados` e `/versao_dados` antes e depois de uma carga."
+  - Escrevi testes para `parse_float`, `parse_int` e `parse_timestamp` com casos de borda tirados dos CSVs.
+  - Simulei com `requests-mock` timeout, 503, 429 e 401 na GeoAPI e conferi quais são repetidos.
+  - Escrevi o ADR de uma página do Carregador de Dados e discuti com a equipe.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [O que é ETL?](https://www.youtube.com/watch?v=ANkrrduTtu0). Simplificando Redes, 12 min, português.
+- [Vídeo]{.selo} [Pipeline de dados na prática: ETL, ELT e arquitetura medallion](https://www.youtube.com/watch?v=oSXMIL0xTSQ). vbluuiza, 11 min, português.
+- [Vídeo]{.selo} [Todo dev precisa entender isso: idempotência](https://www.youtube.com/watch?v=YNHKO_74sLU). Augusto Galego, 22 min, português.
+- [Leitura]{.selo} [Timeouts, retries and backoff with jitter](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/). Amazon Builders' Library, inglês.
+- [Leitura]{.selo} [429 Too Many Requests](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Reference/Status/429). MDN, português.
+- [Leitura]{.selo} [Architectural Decision Records](https://adr.github.io). Inglês.
+- [Documentação]{.selo} [tenacity](https://tenacity.readthedocs.io/en/latest/). Inglês.
+- [Documentação]{.selo} [requests](https://requests.readthedocs.io). Inglês.
+- [Livro]{.selo} *Designing Data-Intensive Applications*. Martin Kleppmann, O'Reilly; capítulo sobre processamento em lote. Inglês.
+:::

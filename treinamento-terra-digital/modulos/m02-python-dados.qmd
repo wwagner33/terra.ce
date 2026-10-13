@@ -1,0 +1,487 @@
+---
+title: "M2 · Python para análise de dados"
+subtitle: "pandas e numpy do jeito que o dashboard usa"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** todos os perfis (designers: opcional) · **Pré-requisitos:** Python básico, [M0](m00-dominio-fundiario.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Todo número que aparece no dashboard passa por um DataFrame: a contagem por
+categoria, a área total, o Gini de cada município. Três dos bugs corrigidos na
+versão 1.2.0 vinham de detalhes de pandas: um DataFrame compartilhado
+alterado por uma sessão (B8), um filtro que deixava a seleção vazia (B2) e
+nomes de município em formatos diferentes (B1).
+:::
+
+## Objetivos
+
+- Carregar respostas da API num DataFrame com os tipos certos.
+- Tratar valores ausentes sem perder ou inventar dados.
+- Trocar laços por operações vetorizadas.
+- Agrupar, agregar e juntar tabelas para chegar ao Gini por proprietário.
+- Saber quando copiar um DataFrame.
+
+## 1. Do JSON ao DataFrame
+
+O miniserver devolve os imóveis de uma região como uma lista de dicionários.
+O dashboard junta as listas de todas as regiões e monta um único DataFrame em
+[`repositorio.carregarLotes`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py#L128-L152):
+
+```python
+df = pd.DataFrame.from_records(registros).reindex(columns=COLUNAS_LOTES)
+for coluna in ("area", "modulo_fiscal"):
+    df[coluna] = pd.to_numeric(df[coluna], errors="coerce")
+df.attrs["versao"] = time.time()
+```
+
+Três decisões aparecem aqui:
+
+- `reindex(columns=COLUNAS_LOTES)` garante que todas as colunas esperadas
+  existem, na mesma ordem, mesmo se a API deixar de mandar alguma. As
+  ausentes viram colunas vazias, e o código seguinte não quebra com
+  `KeyError`.
+- `pd.to_numeric(..., errors="coerce")` converte texto em número e transforma
+  o que não for número em `NaN`, em vez de lançar erro.
+- `df.attrs` guarda metadados junto do DataFrame. Aqui, um identificador da
+  carga, usado como chave de cache ([M10](m10-desempenho-cache.qmd)).
+
+~~~exercicio
+id: m02-to-numeric
+tipo: escolha
+pergunta: "Qual é o resultado de `pd.to_numeric(pd.Series([\"12.5\", \"12,5\", \"\"]), errors=\"coerce\")`?"
+opcoes:
+  - texto: "`12.5`, `NaN` e `NaN`"
+    correta: true
+  - texto: "`12.5`, `12.5` e `0`"
+    explicacao: O pandas não entende vírgula decimal, e texto vazio não vira zero.
+  - texto: Um erro, por causa da vírgula
+    explicacao: Com `errors="coerce"` não há erro. O que não for número vira `NaN`.
+explicacao: |
+  A vírgula decimal não é reconhecida e vira `NaN`. Por isso os importadores
+  do miniserver têm o próprio `parse_float`, que troca a vírgula por ponto
+  antes de converter ([M9](m09-engenharia-dados.qmd)).
+~~~
+
+## 2. Valores ausentes
+
+`NaN` (*not a number*) é como o pandas marca um valor ausente numa coluna
+numérica. Ele tem uma propriedade que surpreende: **`NaN` não é igual a
+nada, nem a si mesmo**. Por isso nunca se testa `valor == np.nan`; usa-se
+`pd.isna(valor)` ou `serie.isna()`.
+
+O dashboard descarta os imóveis sem área ou sem módulo fiscal antes de
+classificar, em
+[`prepararLotesClassificados`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/classificacao.py#L33-L41):
+
+```python
+dfClassificado = dfLotes.dropna(subset=["modulo_fiscal", "area"]).copy()
+```
+
+Descartar é uma escolha: os imóveis sem área não entram nas contagens. A
+alternativa, preencher com zero, inventaria imóveis de área nula e
+distorceria a média.
+
+~~~exercicio
+id: m02-nan
+tipo: escolha
+pergunta: "O que `float(\"nan\") == float(\"nan\")` devolve em Python?"
+opcoes:
+  - texto: "`False`"
+    correta: true
+  - texto: "`True`"
+    explicacao: Pela norma de ponto flutuante (IEEE 754), NaN é diferente de tudo, inclusive dele mesmo.
+  - texto: Um erro
+    explicacao: A comparação é válida e devolve um booleano.
+explicacao: Use `pd.isna()` ou `math.isnan()` para testar ausência.
+~~~
+
+## 3. Vetorização
+
+Um laço em Python que percorre 100 mil imóveis, um por um, é lento: cada
+volta passa pelo interpretador. Uma operação **vetorizada** pede ao numpy que
+faça a conta no array inteiro de uma vez, num laço escrito em C. Compare:
+
+```python
+# Linha a linha: simples de ler, lento em tabelas grandes
+df["categoria"] = df.apply(lambda linha: classificar(linha["area"], linha["modulo_fiscal"]), axis=1)
+
+# Vetorizado: o que o dashboard faz
+condicoes = [area < mf, area <= 4 * mf, area <= 15 * mf, area > 15 * mf]
+df["categoria"] = np.select(condicoes, CATEGORIAS, default=SEM_CLASSIFICACAO)
+```
+
+Cada condição é um **array de booleanos**, do tamanho da tabela.
+`np.select` percorre as condições na ordem e, para cada linha, escolhe o
+rótulo da primeira verdadeira.
+
+~~~exercicio
+id: m02-np-select
+tipo: python
+pergunta: |
+  Complete `classificarPorModuloFiscal(area, moduloFiscal)` usando
+  `np.select`. Ela recebe dois arrays (ou listas) e devolve um array de textos
+  com as categorias de `CATEGORIAS`, e `"Sem Classificação"` quando faltar
+  área ou módulo fiscal.
+inicial: |
+  import numpy as np
+
+  CATEGORIAS = ["Pequena Propriedade < 1 MF", "Pequena Propriedade", "Média Propriedade", "Grande Propriedade"]
+
+  def classificarPorModuloFiscal(area, moduloFiscal):
+      area = np.asarray(area, dtype=float)
+      moduloFiscal = np.asarray(moduloFiscal, dtype=float)
+      condicoes = []  # monte as quatro condições
+      return np.select(condicoes, CATEGORIAS, default="Sem Classificação")
+
+  print(classificarPorModuloFiscal([30, 200, 500, 1000], [55, 55, 55, 55]))
+solucao: |
+  import numpy as np
+
+  CATEGORIAS = ["Pequena Propriedade < 1 MF", "Pequena Propriedade", "Média Propriedade", "Grande Propriedade"]
+
+  def classificarPorModuloFiscal(area, moduloFiscal):
+      area = np.asarray(area, dtype=float)
+      moduloFiscal = np.asarray(moduloFiscal, dtype=float)
+      condicoes = [
+          area < moduloFiscal,
+          area <= 4 * moduloFiscal,
+          area <= 15 * moduloFiscal,
+          area > 15 * moduloFiscal,
+      ]
+      return np.select(condicoes, CATEGORIAS, default="Sem Classificação")
+
+  print(classificarPorModuloFiscal([30, 200, 500, 1000], [55, 55, 55, 55]))
+testes:
+  - nome: classifica os quatro exemplos do M0
+    codigo: |
+      r = list(classificarPorModuloFiscal([30, 200, 500, 1000], [55, 55, 55, 55]))
+      assert r == CATEGORIAS, r
+  - nome: respeita as fronteiras de 1, 4 e 15 MF
+    codigo: |
+      r = list(classificarPorModuloFiscal([55, 220, 825], [55, 55, 55]))
+      assert r == ["Pequena Propriedade", "Pequena Propriedade", "Média Propriedade"], r
+  - nome: sem área ou sem módulo fiscal fica sem classificação
+    codigo: |
+      r = list(classificarPorModuloFiscal([float("nan"), 100], [55, float("nan")]))
+      assert r == ["Sem Classificação", "Sem Classificação"], r
+explicacao: |
+  Toda comparação com `NaN` dá `False`, então um imóvel sem área não satisfaz
+  nenhuma condição e recebe o `default`. É o mesmo código de
+  `modules/classificacao.py`.
+~~~
+
+~~~exercicio
+id: m02-vetorizado
+tipo: multipla
+pergunta: Quais destas operações são vetorizadas, isto é, rodam sobre a coluna inteira sem um laço em Python?
+opcoes:
+  - texto: "`df[\"area\"] / df[\"modulo_fiscal\"]`"
+    correta: true
+  - texto: "`np.select(condicoes, rotulos)`"
+    correta: true
+  - texto: "`df.apply(funcao, axis=1)`"
+    explicacao: O `apply` por linha chama a sua função Python uma vez para cada linha.
+  - texto: "`df[\"area\"] > 100`"
+    correta: true
+  - texto: "`for i, linha in df.iterrows(): ...`"
+    explicacao: É um laço em Python, o caminho mais lento.
+explicacao: Aritmética entre colunas, comparações e funções do numpy são vetorizadas.
+~~~
+
+## 4. Agrupar, agregar e juntar
+
+O Gini de cada município precisa da **área de cada proprietário** naquele
+município. Isso é um `groupby` com duas chaves e uma agregação nomeada, como em
+[`prepararBaseGini`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L68-L82):
+
+```python
+contagem = df.groupby("nome_municipio").size().rename("cnt_imoveis").reset_index()
+agrupado = (
+    df.groupby(["nome_municipio", "chave_proprietario"])
+    .agg(area=("area", "sum"))
+    .reset_index()
+)
+base = agrupado.merge(contagem, on="nome_municipio", how="left")
+```
+
+- `groupby(...).size()` conta linhas por grupo: o número de imóveis do município.
+- `.agg(area=("area", "sum"))` cria a coluna `area` com a soma da coluna `area` em cada grupo.
+- `reset_index()` transforma as chaves do grupo de volta em colunas.
+- `merge(..., how="left")` junta as duas tabelas pela coluna comum, mantendo todas as linhas da esquerda.
+
+~~~exercicio
+id: m02-agrupar
+tipo: python
+pergunta: |
+  A partir de `lotes`, monte `base` com uma linha por município e
+  proprietário, a coluna `area` (soma das áreas desse proprietário no
+  município) e a coluna `cnt_imoveis` (total de imóveis do município).
+inicial: |
+  import pandas as pd
+
+  lotes = pd.DataFrame({
+      "nome_municipio": ["crato", "crato", "crato", "russas", "russas"],
+      "chave_proprietario": ["P1", "P1", "P2", "P3", "P4"],
+      "area": [10.0, 5.0, 20.0, 7.0, 3.0],
+  })
+
+  contagem = None  # imóveis por município
+  agrupado = None  # área por município e proprietário
+  base = None      # junção das duas
+
+  print(base)
+solucao: |
+  import pandas as pd
+
+  lotes = pd.DataFrame({
+      "nome_municipio": ["crato", "crato", "crato", "russas", "russas"],
+      "chave_proprietario": ["P1", "P1", "P2", "P3", "P4"],
+      "area": [10.0, 5.0, 20.0, 7.0, 3.0],
+  })
+
+  contagem = lotes.groupby("nome_municipio").size().rename("cnt_imoveis").reset_index()
+  agrupado = (
+      lotes.groupby(["nome_municipio", "chave_proprietario"])
+      .agg(area=("area", "sum"))
+      .reset_index()
+  )
+  base = agrupado.merge(contagem, on="nome_municipio", how="left")
+
+  print(base)
+testes:
+  - nome: base é um DataFrame com as colunas pedidas
+    codigo: |
+      assert isinstance(base, pd.DataFrame), "base não é um DataFrame"
+      for coluna in ["nome_municipio", "chave_proprietario", "area", "cnt_imoveis"]:
+          assert coluna in base.columns, f"falta a coluna {coluna}"
+  - nome: uma linha por município e proprietário
+    codigo: |
+      assert len(base) == 4, f"esperava 4 linhas, veio {len(base)}"
+  - nome: P1 tem 15 ha no Crato
+    codigo: |
+      linha = base[(base.nome_municipio == "crato") & (base.chave_proprietario == "P1")]
+      assert float(linha["area"].iloc[0]) == 15.0, linha
+  - nome: o Crato tem 3 imóveis e Russas tem 2
+    codigo: |
+      porMunicipio = base.groupby("nome_municipio")["cnt_imoveis"].first().to_dict()
+      assert porMunicipio == {"crato": 3, "russas": 2}, porMunicipio
+explicacao: |
+  P1 tem dois lotes no Crato (10 + 5 ha) e conta como um proprietário com
+  15 ha. A contagem de imóveis, porém, continua sendo de lotes: 3 no Crato.
+~~~
+
+## 5. O Índice de Gini, passo a passo
+
+A fórmula usada em
+[`calcularGini`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L34-L45)
+parte das áreas **em ordem crescente**, $x_1 \le x_2 \le \dots \le x_n$:
+
+$$
+G = \frac{2 \sum_{i=1}^{n} i \, x_i}{n \sum_{i=1}^{n} x_i} - \frac{n + 1}{n}
+$$
+
+Para as áreas `[1, 2, 3, 4, 10]`, já ordenadas, com $n = 5$:
+
+| $i$ | $x_i$ | $i \cdot x_i$ |
+|---|---|---|
+| 1 | 1 | 1 |
+| 2 | 2 | 4 |
+| 3 | 3 | 9 |
+| 4 | 4 | 16 |
+| 5 | 10 | 50 |
+| **soma** | **20** | **80** |
+
+$$
+G = \frac{2 \cdot 80}{5 \cdot 20} - \frac{6}{5} = 1{,}6 - 1{,}2 = 0{,}4
+$$
+
+~~~exercicio
+id: m02-gini-manual
+tipo: numero
+pergunta: Usando a mesma fórmula, calcule o Gini das áreas `[2, 2, 2, 14]`.
+resposta: 0.45
+tolerancia: 0.001
+dica: "Soma das áreas: 20. Soma de i·x: 1·2 + 2·2 + 3·2 + 4·14."
+explicacao: |
+  Σ i·x = 2 + 4 + 6 + 56 = 68, então G = (2 · 68) / (4 · 20) − 5/4 =
+  1,7 − 1,25 = 0,45. Um proprietário com 70% da área já leva o índice para
+  perto de 0,5.
+~~~
+
+~~~exercicio
+id: m02-gini-codigo
+tipo: python
+pergunta: |
+  Implemente `calcularGini(valores)` com numpy, como no dashboard: ignore
+  `NaN`, zeros e negativos, ordene, e devolva `float("nan")` se não sobrar
+  nenhum valor.
+inicial: |
+  import numpy as np
+
+  def calcularGini(valores):
+      a = np.array(valores, dtype=float)
+      # 1. fique só com os valores válidos e positivos
+      # 2. ordene
+      # 3. aplique a fórmula
+      return 0.0
+
+  print(calcularGini([1, 2, 3, 4, 10]))
+solucao: |
+  import numpy as np
+
+  def calcularGini(valores):
+      a = np.array(valores, dtype=float)
+      a = np.sort(a[~np.isnan(a) & (a > 0)])
+      n = a.size
+      if n == 0 or a.sum() == 0:
+          return float("nan")
+      indices = np.arange(1, n + 1)
+      return float((2 * (indices * a).sum()) / (n * a.sum()) - (n + 1) / n)
+
+  print(calcularGini([1, 2, 3, 4, 10]))
+testes:
+  - nome: o exemplo do texto dá 0,4
+    codigo: |
+      assert abs(calcularGini([1, 2, 3, 4, 10]) - 0.4) < 1e-9, calcularGini([1, 2, 3, 4, 10])
+  - nome: a ordem da entrada não importa
+    codigo: |
+      assert abs(calcularGini([10, 4, 3, 2, 1]) - 0.4) < 1e-9, calcularGini([10, 4, 3, 2, 1])
+  - nome: valores iguais dão zero
+    codigo: |
+      assert abs(calcularGini([50, 50, 50, 50])) < 1e-9, calcularGini([50, 50, 50, 50])
+  - nome: ignora NaN, zero e negativos
+    codigo: |
+      assert abs(calcularGini([1, 2, 3, 4, 10, 0, -5, float("nan")]) - 0.4) < 1e-9
+  - nome: lista vazia devolve NaN
+    codigo: |
+      import math
+      assert math.isnan(calcularGini([])), calcularGini([])
+explicacao: |
+  `~np.isnan(a) & (a > 0)` é uma máscara booleana: mantém só os valores
+  válidos. O resultado de `[2, 2, 2, 14]`, do exercício anterior, é 0,45.
+~~~
+
+~~~exercicio
+id: m02-gini-zeros
+tipo: aberta
+pergunta: |
+  `calcularGini` descarta zeros e negativos. Por que isso faz sentido para
+  áreas? E o que a função devolve para um município com um único
+  proprietário?
+resposta: |
+  - Área zero ou negativa é erro de cadastro, não um proprietário real sem
+    terra. Mantê-las inflaria a desigualdade com dados inválidos.
+  - Com um único valor, n = 1: G = 2·x / x − 2 = 0. O índice diz "igualdade
+    total", o que é verdade e inútil ao mesmo tempo. É um dos motivos de o
+    dashboard sinalizar municípios com poucos imóveis.
+~~~
+
+## 6. Copiar ou não copiar
+
+O dashboard guarda o DataFrame de todos os imóveis em cache e o **compartilha
+entre todas as pessoas conectadas** ([M7](m07-streamlit.qmd)). Se uma página
+alterar esse DataFrame, a alteração aparece para todo mundo. Esse foi o bug
+B8.
+
+A regra do projeto: **trate os DataFrames do cache como somente leitura** e
+faça `.copy()` antes de alterar. No pandas 3, que o dashboard usa, o
+*Copy-on-Write* está sempre ligado: uma seleção como `df[["area"]]` já se
+comporta como cópia ao ser alterada. O `.copy()` explícito continua
+recomendado porque deixa a intenção clara e protege código que também rode
+em versões antigas.
+
+~~~exercicio
+id: m02-copia
+tipo: escolha
+pergunta: Uma página precisa adicionar uma coluna ao DataFrame que vem de `carregarLotes()`. Qual é o jeito certo?
+opcoes:
+  - texto: "`df = carregarLotes().copy()` e depois `df[\"nova\"] = ...`"
+    correta: true
+  - texto: "`df = carregarLotes()` e depois `df[\"nova\"] = ...`"
+    explicacao: Isso altera o objeto compartilhado no cache, visível para todas as sessões.
+  - texto: Limpar o cache antes, com `carregarLotes.clear()`
+    explicacao: Limpar o cache obriga a recarregar tudo da API e não resolve o problema da alteração.
+explicacao: A cópia é local à página. O cache continua intacto para as outras sessões.
+~~~
+
+## 7. Texto com acentos
+
+Nomes de município chegam em formatos diferentes: "Monsenhor Tabosa",
+"mons. tabosa", "MONSENHOR TABOSA". Para comparar, o projeto normaliza:
+remove acentos com a decomposição Unicode NFKD, passa para minúsculas e
+compara. Veja `normalizarNomes` em
+[`paginaConcentracao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L48-L53):
+
+```python
+serie.str.normalize("NFKD").str.encode("ascii", "ignore").str.decode("ascii").str.lower()
+```
+
+A NFKD separa "á" em "a" + acento; o `encode("ascii", "ignore")` joga o acento
+fora.
+
+~~~exercicio
+id: m02-normalizar
+tipo: python
+pergunta: |
+  Escreva `normalizar(texto)` que remove acentos, passa para minúsculas e
+  tira espaços das pontas, usando `unicodedata`.
+inicial: |
+  import unicodedata
+
+  def normalizar(texto):
+      return texto
+
+  print(normalizar("  Quixadá "))
+solucao: |
+  import unicodedata
+
+  def normalizar(texto):
+      semAcento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+      return semAcento.lower().strip()
+
+  print(normalizar("  Quixadá "))
+testes:
+  - nome: remove acentos e espaços
+    codigo: |
+      assert normalizar("  Quixadá ") == "quixada", repr(normalizar("  Quixadá "))
+  - nome: trata cedilha e til
+    codigo: |
+      assert normalizar("SÃO GONÇALO DO AMARANTE") == "sao goncalo do amarante", normalizar("SÃO GONÇALO DO AMARANTE")
+explicacao: O mesmo truque aparece nos dois projetos, inclusive na regra de privacidade ([M13](m13-lgpd.qmd)).
+~~~
+
+## No código
+
+- [`modules/repositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py#L128-L152): JSON para DataFrame, tipos e `attrs`.
+- [`modules/classificacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/classificacao.py): `np.select`, `dropna`, `value_counts` e `groupby`.
+- [`modules/paginaConcentracao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L34-L105): Gini, normalização de nomes e agregações.
+- [`modules/paginaGraficos.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaGraficos.py): tabelas e gráficos a partir das contagens.
+
+## Prática no projeto
+
+~~~exercicio
+id: m02-pratica
+tipo: checklist
+pergunta: No ambiente do dashboard (`.venv`), faça num notebook ou script.
+itens:
+  - Gerei 100 mil imóveis sintéticos com áreas e módulos fiscais aleatórios.
+  - Comparei o tempo de `classificarPorModuloFiscal` com uma versão usando `apply` linha a linha (use `time.perf_counter`).
+  - Chamei `prepararBaseGini` e `calcularGiniPorMunicipio` com dados sintéticos e conferi um município à mão.
+  - Desenhei a curva de Lorenz de um município sintético com matplotlib.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Te ensino TUDO sobre Pandas para análise de dados com Python](https://www.youtube.com/watch?v=1JpYOqvDJNU). Asimov Academy, 13 min, português.
+- [Vídeo]{.selo} [Introdução ao Pandas no Python](https://www.youtube.com/watch?v=C0aj3FjN5e0). Hashtag Programação, 51 min, português.
+- [Vídeo]{.selo} [Como sair do zero com a biblioteca NumPy](https://www.youtube.com/watch?v=LZDZ0AZmWHI). Hashtag Programação, 1 h, português.
+- [Leitura]{.selo} [10 minutes to pandas](https://pandas.pydata.org/docs/user_guide/10min.html). Documentação do pandas, inglês.
+- [Leitura]{.selo} [Copy-on-Write](https://pandas.pydata.org/docs/user_guide/copy_on_write.html). Documentação do pandas, inglês.
+- [Leitura]{.selo} [NumPy: the absolute basics for beginners](https://numpy.org/doc/stable/user/absolute_beginners.html). Documentação do numpy, inglês.
+- [Curso]{.selo} [Pandas](https://www.kaggle.com/learn/pandas). Kaggle Learn, exercícios no navegador, inglês.
+- [Livro]{.selo} [Python for Data Analysis, 3ª ed.](https://wesmckinney.com/book/). Wes McKinney, versão aberta, inglês.
+:::

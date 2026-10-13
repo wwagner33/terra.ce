@@ -1,0 +1,103 @@
+---
+title: "Terra Digital"
+subtitle: "Treinamento da equipe da Plataforma Terra.Ce"
+toc: false
+---
+
+A **Plataforma Terra.Ce** publica, em mapas e gráficos, os dados fundiários do
+Ceará cadastrados pelo Instituto de Desenvolvimento Agrário do Ceará (IDACE).
+Ela nasceu no Projeto Cientista Chefe Terra, parceria entre o IDACE, a
+Universidade Federal do Ceará (UFC) e a Fundação Cearense de Apoio ao
+Desenvolvimento Científico e Tecnológico (Funcap), e está no ar em
+<https://terrace.virtual.ufc.br/paineis>.
+
+Este material forma quem vai desenvolver, manter e desenhar a plataforma. Ele
+cobre o domínio fundiário e cada tecnologia usada no código, sempre a partir
+do próprio projeto, com exercícios corrigidos na hora pelo navegador.
+
+::: {.cartoes}
+::: {.cartao}
+#### Comece aqui
+Como os módulos funcionam, os tipos de exercício e as regras de segurança.
+[Como estudar →](comece/como-estudar.qmd)
+:::
+::: {.cartao}
+#### Módulos
+Dezessete módulos, do domínio fundiário à IA aplicada, em 12 semanas.
+[Cronograma e trilhas →](comece/cronograma.qmd)
+:::
+::: {.cartao}
+#### Manual de contribuição
+Como programadores e designers alteram o código e publicam por pull request.
+[Abrir o manual →](manual/index.qmd)
+:::
+::: {.cartao}
+#### Meu progresso
+O que você já concluiu, com opção de baixar e levar para outro computador.
+[Ver progresso →](progresso.qmd)
+:::
+:::
+
+## A plataforma em uma figura
+
+```{mermaid}
+%%| fig-cap: "Do cadastro do IDACE ao navegador. A tabela abaixo detalha cada peça."
+flowchart LR
+    geoapi["GeoAPI<br/>do IDACE"] --> csv["CSVs"]
+    csv --> pg[("PostGIS")]
+    pg --> tgdm["miniserver<br/>FastAPI"]
+    tgdm -->|"JSON + JWT"| dash["dashboard<br/>Streamlit"]
+    tgdm -->|"JSON + JWT"| ai["Terra-AI"]
+    dash --> nav["navegador"]
+```
+
+| Peça | O que faz | Tecnologias | Módulos |
+|---|---|---|---|
+| Importadores | Coletam a malha fundiária na GeoAPI do IDACE e carregam os CSVs no banco | requests, tenacity, SQLAlchemy | [M9](modulos/m09-engenharia-dados.qmd) |
+| Banco de dados | Guarda imóveis, municípios, assentamentos e reservatórios com geometria | PostgreSQL, PostGIS | [M3](modulos/m03-geoprocessamento.qmd), [M4](modulos/m04-postgis.qmd) |
+| `terraGeoDataMiniServer` | API somente leitura com dados e GeoJSON, protegida por JWT | FastAPI, Pydantic, Gunicorn | [M5](modulos/m05-fastapi.qmd), [M6](modulos/m06-seguranca.qmd) |
+| `dashboard_fundiario_ceara` | Painéis com gráficos, mapas e o Índice de Gini | Streamlit, Folium, pandas, GeoPandas | [M7](modulos/m07-streamlit.qmd), [M8](modulos/m08-mapas-graficos.qmd) |
+| `terra_ai` | Assistente que responde em linguagem simples, consultando a API | API do Claude, uso de ferramentas | [M16](modulos/m16-terra-ai.qmd) |
+| Infraestrutura | Imagens no Docker Hub, stack no Portainer, testes no GitHub Actions | Podman/Docker, Compose, GitHub Actions | [M14](modulos/m14-containers.qmd), [M15](modulos/m15-integracao-continua.qmd) |
+
+## Os módulos
+
+**Fundamentos.**
+[M0 · O domínio fundiário](modulos/m00-dominio-fundiario.qmd) ·
+[M1 · Ambiente e Git](modulos/m01-ambiente-git.qmd) ·
+[M2 · Python para dados](modulos/m02-python-dados.qmd) ·
+[M3 · Geoprocessamento](modulos/m03-geoprocessamento.qmd)
+
+**Backend e banco de dados.**
+[M4 · PostgreSQL e PostGIS](modulos/m04-postgis.qmd) ·
+[M5 · API com FastAPI](modulos/m05-fastapi.qmd) ·
+[M6 · Segurança](modulos/m06-seguranca.qmd)
+
+**Painéis e mapas.**
+[M7 · Streamlit](modulos/m07-streamlit.qmd) ·
+[M8 · Mapas e gráficos](modulos/m08-mapas-graficos.qmd)
+
+**Dados, desempenho e qualidade.**
+[M9 · Engenharia de dados](modulos/m09-engenharia-dados.qmd) ·
+[M10 · Desempenho e cache](modulos/m10-desempenho-cache.qmd) ·
+[M11 · Testes](modulos/m11-testes.qmd) ·
+[M12 · Qualidade e documentação](modulos/m12-qualidade-documentacao.qmd)
+
+**Privacidade e operação.**
+[M13 · LGPD](modulos/m13-lgpd.qmd) ·
+[M14 · Containers e implantação](modulos/m14-containers.qmd) ·
+[M15 · Integração contínua](modulos/m15-integracao-continua.qmd)
+
+**IA aplicada.**
+[M16 · O Terra-AI](modulos/m16-terra-ai.qmd)
+
+No fim, o [projeto integrador](projeto-integrador.qmd) resolve uma pendência
+real da plataforma, entregue por pull request.
+
+## Versão de referência
+
+O material descreve a versão **1.2.0** do miniserver e do dashboard. Os links
+para o código apontam para essa versão nos repositórios da organização
+[Projeto-Cientista-Chefe-Terra](https://github.com/Projeto-Cientista-Chefe-Terra).
+Quando o código mudar, o material também muda: veja
+[como editar este material](manual/material-didatico.qmd).

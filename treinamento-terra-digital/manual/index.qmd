@@ -1,0 +1,125 @@
+---
+title: "Manual de contribuição"
+subtitle: "Como programadores, designers e autores alteram a plataforma e publicam por pull request"
+---
+
+Toda mudança na Plataforma Terra.Ce, seja uma correção de código, uma cor nova,
+um texto da página inicial ou um exercício deste material, entra pelo mesmo
+caminho: uma **branch**, um **pull request** revisado e verificado
+automaticamente, e o **merge**. Nada vai direto para a `main`, e nada vai para
+a produção sem passar pela coordenação.
+
+## Os repositórios
+
+| Repositório | O que tem | Onde |
+|---|---|---|
+| `dashboard_fundiario_ceara` | o dashboard Streamlit: páginas, mapas, CSS, imagens | [Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara) |
+| `terraGeoDataMiniServer` | a API FastAPI e os importadores de dados | [Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer) |
+| `terra.ce` (superprojeto) | os dois acima como submódulos, a stack de produção, o Terra-AI e **este material** | [wwagner33/terra.ce](https://github.com/wwagner33/terra.ce) |
+
+Uma mudança no dashboard é um pull request no repositório do dashboard. Depois
+do merge, outro pull request, pequeno, atualiza o ponteiro do submódulo no
+superprojeto ([M1](../modulos/m01-ambiente-git.qmd)).
+
+## O fluxo em uma figura
+
+```{mermaid}
+%%| fig-cap: "Da ideia à produção. As duas últimas etapas são da coordenação."
+flowchart TB
+    i["Issue"] --> b["Branch"]
+    b --> c["Commits"]
+    c --> pr["Pull<br/>request"]
+    pr --> ci{"CI"}
+    ci -->|vermelha| c
+    ci -->|verde| rev{"Revisão"}
+    rev -->|mudanças| c
+    rev -->|aprovado| m["Merge"]
+    m --> sup["Submódulo no<br/>superprojeto"]
+    sup --> v["Versão e<br/>publicação"]
+```
+
+## Papéis
+
+| Papel | O que faz | Guia |
+|---|---|---|
+| **Programador** | corrige, cria funcionalidades, escreve testes | [Pull request passo a passo](fluxo-pull-request.qmd) |
+| **Designer** | cores, tipografia, imagens, textos, gráficos e mapas | [Guia para designers](designers.qmd) |
+| **Revisor** | lê o pull request de outra pessoa e aprova ou pede mudanças | [Revisão de código](revisao.qmd) |
+| **Mantenedor** | faz o merge, cria versões e publica na produção | [Versões e publicação](publicacao.qmd) |
+| **Autor do material** | escreve e corrige páginas e exercícios deste site | [Como editar este material](material-didatico.qmd) |
+
+Uma pessoa pode ter vários papéis. Quem abriu um pull request não aprova o
+próprio.
+
+## Regras de ouro
+
+1. **Nada direto na `main`.** Toda mudança passa por pull request.
+2. **Um pull request, um assunto.** Correção de bug e mudança de cor não andam juntas.
+3. **CI verde antes da revisão.** Lint e testes passando é o mínimo.
+4. **Nunca envie segredos nem dados pessoais.** Nada de `.env`, `secrets.toml`,
+   CSVs do cadastro ou prints com nomes reais. Se acontecer, avise a
+   coordenação na hora: apagar o arquivo não basta, o segredo tem de ser trocado.
+5. **Descreva o porquê.** O título diz o que muda; a descrição diz por que e
+   como testar.
+6. **Mudança visível tem print.** Antes e depois, no computador e no celular.
+7. **Produção é da coordenação.** Publicar versões e mexer no Portainer não
+   faz parte de um pull request.
+
+~~~exercicio
+id: manual-fluxo
+tipo: ordenar
+pergunta: Ordene o caminho de uma correção no dashboard até chegar à produção.
+itens:
+  - Abrir ou escolher a issue que descreve o problema
+  - Criar a branch a partir da main atualizada
+  - Fazer os commits e rodar lint e testes
+  - Abrir o pull request com descrição e prints
+  - Passar na CI e na revisão
+  - Fazer o merge
+  - Atualizar o ponteiro do submódulo no superprojeto
+  - Publicar a versão (coordenação)
+explicacao: As duas últimas etapas acontecem fora do pull request original e, a última, só pela coordenação.
+~~~
+
+~~~exercicio
+id: manual-regras
+tipo: multipla
+pergunta: Quais situações violam as regras de ouro?
+opcoes:
+  - texto: Um pull request que corrige o filtro de municípios e, de quebra, troca a paleta dos gráficos
+    correta: true
+  - texto: Um pull request com a CI vermelha pedindo revisão "para adiantar"
+    correta: true
+  - texto: Um print de tela na descrição do PR mostrando o tooltip com um nome real de proprietário
+    correta: true
+  - texto: Um pull request em rascunho (*draft*) para pedir opinião antes de terminar
+    explicacao: Rascunho é bem-vindo. Ele avisa que ainda não está pronto e convida a conversa cedo.
+  - texto: Um mantenedor publicando a versão no Portainer depois do merge
+    explicacao: Publicar é exatamente o papel do mantenedor.
+explicacao: Assunto misturado, CI vermelha e dados pessoais em prints são os três deslizes mais comuns.
+~~~
+
+## Antes da primeira contribuição
+
+~~~exercicio
+id: manual-preparacao
+tipo: checklist
+pergunta: Prepare-se uma única vez.
+itens:
+  - Tenho conta no GitHub com autenticação em dois fatores ativada.
+  - Pedi à coordenação acesso aos repositórios da organização Projeto-Cientista-Chefe-Terra.
+  - "Configurei nome e e-mail no Git (`git config --global user.name` e `user.email`)."
+  - "Autentiquei o GitHub CLI com `gh auth login` (ou configurei uma chave SSH)."
+  - Clonei o superprojeto com os submódulos e rodei os testes (M1).
+  - Li as regras de ouro e as regras de segurança do treinamento.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Como criar um Pull Request (PR) no GitHub](https://www.youtube.com/watch?v=U-Y_Mtdyo74). Willian Justen, 4 min, português.
+- [Vídeo]{.selo} [Como criar seu primeiro pull request no GitHub](https://www.youtube.com/watch?v=Du04jBWrv4A). Filho da Nuvem, 7 min, português.
+- [Leitura]{.selo} [GitHub flow](https://docs.github.com/pt/get-started/using-github/github-flow). GitHub Docs, português.
+- [Leitura]{.selo} [Sobre pull requests](https://docs.github.com/pt/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/about-pull-requests). GitHub Docs, português.
+- [Interativo]{.selo} [First Contributions](https://github.com/firstcontributions/first-contributions/blob/main/docs/translations/README.pt_br.md). Um repositório para treinar o primeiro pull request, português.
+:::

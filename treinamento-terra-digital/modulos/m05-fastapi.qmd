@@ -1,0 +1,416 @@
+---
+title: "M5 · API com FastAPI"
+subtitle: "HTTP, o miniserver por dentro e como acrescentar um endpoint"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** backend e banco · **Recomendado para:** dados e painéis, infraestrutura, IA · **Pré-requisitos:** [M4](m04-postgis.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+O dashboard e o Terra-AI não falam com o banco: falam com o
+`terraGeoDataMiniServer`, uma API FastAPI somente leitura. Toda informação nova
+nos painéis começa com um endpoint novo ou alterado. Entender a API também
+ajuda a diagnosticar o caso mais comum de erro em produção: "Não foi possível
+carregar os dados".
+:::
+
+## Objetivos
+
+- Ler e montar requisições HTTP.
+- Entender como o Gunicorn, o Uvicorn e o FastAPI se encaixam.
+- Ler um endpoint do miniserver e escrever um novo, com validação.
+- Consultar o banco sem abrir brecha para injeção de SQL.
+- Configurar a aplicação por variáveis de ambiente com Pydantic Settings.
+
+## 1. HTTP em cinco minutos
+
+Uma **requisição** HTTP tem método, endereço, cabeçalhos e, às vezes, corpo:
+
+```http
+GET /dados_fundiarios?regiao=Cariri HTTP/1.1
+Host: localhost:8000
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+Accept-Encoding: gzip, br
+```
+
+A **resposta** tem um código de status, cabeçalhos e corpo, aqui em JSON:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Encoding: br
+
+[{"numero_lote": "123", "area": 12.5, "nome_municipio": "crato", ...}]
+```
+
+O miniserver só usa o método `GET`: ele lê, nunca grava. Os códigos que ele
+devolve:
+
+~~~exercicio
+id: m05-status
+tipo: associar
+pergunta: Associe cada código de status ao caso em que o miniserver o devolve.
+pares:
+  - termo: "200"
+    definicao: A consulta deu certo e o corpo traz os dados
+  - termo: "400"
+    definicao: Os parâmetros estão errados, como região e município juntos
+  - termo: "401"
+    definicao: O token JWT falta, é inválido ou venceu
+  - termo: "404"
+    definicao: O filtro não encontrou nenhum registro
+  - termo: "500"
+    definicao: Erro inesperado no servidor, como o banco fora do ar
+explicacao: |
+  O dashboard trata o 404 como "sem dados" em alguns endpoints
+  (`permitir404=True`) e o 401 descartando o token para gerar outro
+  ([M6](m06-seguranca.qmd)).
+~~~
+
+## 2. Do processo ao endpoint
+
+O container do miniserver termina o `entrypoint.sh` com:
+
+```bash
+exec gunicorn data_service.main:app \
+     --worker-class uvicorn.workers.UvicornWorker \
+     --workers 4 --threads 8 --timeout 120
+```
+
+```{mermaid}
+%%| fig-cap: "Uma requisição atravessa várias camadas antes de chegar à consulta SQL."
+flowchart TB
+    c["Dashboard"] --> g["Gunicorn<br/>gerente de processos"]
+    g --> w1["Worker 1<br/>Uvicorn"]
+    g --> w2["Worker 2..4"]
+    w1 --> mw["Middlewares<br/>CORS, GZip, Brotli"]
+    mw --> dep["Dependência<br/>verify_token"]
+    dep --> ep["Endpoint<br/>dados_fundiarios"]
+    ep --> db[("PostGIS")]
+```
+
+- **Gunicorn** cuida dos processos: sobe quatro *workers*, reinicia os que
+  travam e distribui as conexões.
+- **Uvicorn** é o servidor ASGI dentro de cada worker: entende HTTP e chama a
+  aplicação.
+- **FastAPI** é a aplicação: roteia a URL para a função certa, valida os
+  parâmetros, roda as dependências e transforma o retorno em JSON.
+
+Cada worker é um **processo separado**, com a própria memória. Isso tem uma
+consequência que volta no [M10](m10-desempenho-cache.qmd): cada um tem o seu
+próprio cache.
+
+## 3. Anatomia de um endpoint
+
+O endpoint de dados tabulares
+([`main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L308-L340)):
+
+```python
+@app.get("/dados_fundiarios")
+def dados_fundiarios(
+    regiao: str = Query(None),
+    municipio: str = Query(None),
+    _: dict = Depends(verify_token),
+):
+    if bool(regiao) == bool(municipio):
+        raise HTTPException(400, "Informe 'regiao' OU 'municipio'.")
+    where, val = ('regiao_administrativa', regiao) if regiao else ('nome_municipio', municipio)
+    sql = f"""
+        SELECT {props}
+        FROM {settings.TABLE_DADOS_FUNDIARIOS}
+        WHERE {_ci_equals(where, 'param')}
+    """
+    with get_engine().connect() as conn:
+        rows = conn.execute(text(sql), {"param": val}).fetchall()
+    if not rows:
+        raise HTTPException(404, "Nenhum dado encontrado.")
+    ...
+```
+
+Peça por peça:
+
+- `@app.get("/dados_fundiarios")` liga o caminho à função.
+- `Query(None)` declara um parâmetro opcional da *query string*. O FastAPI
+  converte e valida o tipo: um parâmetro `tolerance: Optional[float]` que
+  receba `abc` gera um 422 automaticamente.
+- `Depends(verify_token)` roda a verificação do token **antes** da função. Se
+  ela lançar `HTTPException(401)`, a função nem é chamada.
+- `bool(regiao) == bool(municipio)` é verdadeiro quando os dois foram
+  passados ou nenhum foi: exatamente um dos dois é obrigatório.
+- `HTTPException(404, ...)` interrompe e devolve o erro em JSON.
+
+~~~exercicio
+id: m05-filtro
+tipo: python
+pergunta: |
+  Escreva `escolherFiltro(regiao, municipio)`, que devolve a tupla
+  `("regiao_administrativa", regiao)` ou `("nome_municipio", municipio)` e
+  lança `ValueError` quando os dois forem informados ou nenhum for, como faz
+  o endpoint.
+inicial: |
+  def escolherFiltro(regiao, municipio):
+      return ("regiao_administrativa", regiao)
+
+  print(escolherFiltro("Cariri", None))
+solucao: |
+  def escolherFiltro(regiao, municipio):
+      if bool(regiao) == bool(municipio):
+          raise ValueError("Informe 'regiao' OU 'municipio'.")
+      if regiao:
+          return ("regiao_administrativa", regiao)
+      return ("nome_municipio", municipio)
+
+  print(escolherFiltro("Cariri", None))
+testes:
+  - nome: só a região
+    codigo: |
+      assert escolherFiltro("Cariri", None) == ("regiao_administrativa", "Cariri")
+  - nome: só o município
+    codigo: |
+      assert escolherFiltro(None, "crato") == ("nome_municipio", "crato"), escolherFiltro(None, "crato")
+  - nome: os dois juntos é erro
+    codigo: |
+      try:
+          escolherFiltro("Cariri", "crato")
+      except ValueError:
+          pass
+      else:
+          raise AssertionError("devia lançar ValueError com região e município juntos")
+  - nome: nenhum dos dois é erro (texto vazio conta como ausente)
+    codigo: |
+      try:
+          escolherFiltro("", None)
+      except ValueError:
+          pass
+      else:
+          raise AssertionError("devia lançar ValueError sem filtro nenhum")
+explicacao: "`bool(\"\")` e `bool(None)` são `False`, então texto vazio conta como ausente, como no endpoint."
+~~~
+
+~~~exercicio
+id: m05-caminho
+tipo: ordenar
+pergunta: Ordene o caminho de uma requisição a `/dados_fundiarios` dentro do miniserver.
+itens:
+  - O Gunicorn entrega a conexão a um worker
+  - O Uvicorn interpreta a requisição HTTP
+  - Os middlewares de CORS e compressão entram em ação
+  - A dependência `verify_token` confere o JWT
+  - A função do endpoint valida os filtros e consulta o banco
+  - A resposta JSON sai comprimida
+explicacao: As dependências rodam antes do corpo da função; a compressão é aplicada na volta, pelo middleware.
+~~~
+
+## 4. Consultar sem abrir brecha
+
+O miniserver usa o **SQLAlchemy Core**: escreve o SQL em texto, com
+`text()`, e passa os valores à parte, como **parâmetros**:
+
+```python
+conn.execute(text("SELECT ... WHERE nome_municipio ILIKE :param"), {"param": municipio})
+```
+
+O banco recebe o texto do SQL e o valor separadamente, e nunca interpreta o
+valor como código. Compare com a versão vulnerável:
+
+```python
+# NÃO FAÇA ISSO
+conn.execute(text(f"SELECT ... WHERE nome_municipio = '{municipio}'"))
+```
+
+Com `municipio = "x' OR '1'='1"`, a condição vira `nome_municipio = 'x' OR
+'1'='1'`, que é sempre verdadeira: é a **injeção de SQL**.
+
+Mas o miniserver também usa f-strings no SQL! A diferença está na origem:
+
+- **nomes de tabela e de coluna** (`settings.TABLE_DADOS_FUNDIARIOS`,
+  `'nome_municipio'`) vêm da configuração ou do próprio código, nunca da
+  requisição. Parâmetros do banco não servem para nomes de tabela;
+- a **tolerância** de simplificação entra por f-string, mas foi declarada como
+  `Optional[float]`: o FastAPI só deixa passar números;
+- **todo valor que vem do usuário como texto** vai como parâmetro.
+
+~~~exercicio
+id: m05-injecao
+tipo: python
+pergunta: |
+  A função `buscarLotes` está vulnerável a injeção de SQL. Reescreva usando
+  parâmetro (`?` no sqlite3) para que a busca maliciosa não devolva nada.
+inicial: |
+  import sqlite3
+
+  conexao = sqlite3.connect(":memory:")
+  conexao.executescript("""
+      CREATE TABLE lotes (id INTEGER, municipio TEXT, area REAL);
+      INSERT INTO lotes VALUES (1, 'crato', 10), (2, 'crato', 20), (3, 'russas', 5);
+  """)
+
+  def buscarLotes(conexao, municipio):
+      sql = f"SELECT id FROM lotes WHERE municipio = '{municipio}'"
+      return [linha[0] for linha in conexao.execute(sql)]
+
+  print(buscarLotes(conexao, "crato"))
+  print(buscarLotes(conexao, "x' OR '1'='1"))
+solucao: |
+  import sqlite3
+
+  conexao = sqlite3.connect(":memory:")
+  conexao.executescript("""
+      CREATE TABLE lotes (id INTEGER, municipio TEXT, area REAL);
+      INSERT INTO lotes VALUES (1, 'crato', 10), (2, 'crato', 20), (3, 'russas', 5);
+  """)
+
+  def buscarLotes(conexao, municipio):
+      sql = "SELECT id FROM lotes WHERE municipio = ?"
+      return [linha[0] for linha in conexao.execute(sql, (municipio,))]
+
+  print(buscarLotes(conexao, "crato"))
+  print(buscarLotes(conexao, "x' OR '1'='1"))
+testes:
+  - nome: a busca normal continua funcionando
+    codigo: |
+      assert sorted(buscarLotes(conexao, "crato")) == [1, 2], buscarLotes(conexao, "crato")
+  - nome: a busca maliciosa não devolve nada
+    codigo: |
+      r = buscarLotes(conexao, "x' OR '1'='1")
+      assert r == [], f"a injeção ainda funciona: devolveu {r}"
+  - nome: nomes com apóstrofo funcionam
+    codigo: |
+      conexao.execute("INSERT INTO lotes VALUES (4, 'olho d''água', 7)")
+      assert buscarLotes(conexao, "olho d'água") == [4], buscarLotes(conexao, "olho d'água")
+explicacao: |
+  Com parâmetro, o texto malicioso é só um nome de município que não existe.
+  E de brinde funcionam nomes com apóstrofo, como "Olho d'Água", que
+  quebravam a versão com f-string.
+~~~
+
+## 5. Configuração com Pydantic Settings
+
+O [`config.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/config.py)
+do miniserver declara cada configuração como um atributo tipado:
+
+```python
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    DATABASE_TYPE: DatabaseType          # obrigatório, só aceita sqlite ou postgres
+    POSTGRES_PASSWORD: str               # obrigatório
+    POSTGRES_PORT: int = 5432            # opcional, com padrão
+    JWT_ISSUERS: Annotated[List[str], NoDecode] = ["dashboard_fundiario_ceara", "terra_ai"]
+
+settings = Settings()
+```
+
+O Pydantic lê cada valor do ambiente (ou do `.env`), converte para o tipo
+declarado e falha **na inicialização** se faltar um obrigatório ou se um valor
+for inválido. É melhor falhar ao subir o container do que no meio de uma
+requisição. O `NoDecode` com um validador permite escrever listas como
+`JWT_ISSUERS=dashboard_fundiario_ceara,terra_ai`, sem JSON.
+
+Repare na última linha: `settings` é criado **quando o módulo é importado**.
+Por isso os testes precisam definir as variáveis de ambiente antes de
+qualquer `import config` ([M11](m11-testes.qmd)).
+
+~~~exercicio
+id: m05-settings
+tipo: escolha
+pergunta: O container do miniserver sobe sem a variável `JWT_SECRET`. O que acontece?
+opcoes:
+  - texto: A aplicação falha ao iniciar, com um erro de validação do Pydantic apontando o campo que falta.
+    correta: true
+  - texto: A aplicação sobe e cada requisição devolve 401.
+    explicacao: "`JWT_SECRET: str` não tem valor padrão, então é obrigatório. A falha acontece antes de qualquer requisição."
+  - texto: A aplicação sobe com um segredo vazio.
+    explicacao: Isso seria perigoso, e o Pydantic impede ao exigir o campo.
+explicacao: Falhar cedo e com mensagem clara é a melhor forma de lidar com configuração ausente.
+~~~
+
+## 6. Os endpoints do miniserver
+
+| Endpoint | Parâmetros | Devolve |
+|---|---|---|
+| `/health` | | `{"status": "healthy"}` se o banco responde (sem autenticação) |
+| `/regioes` | | Lista de regiões administrativas |
+| `/municipios` | `regiao` | Municípios de uma região |
+| `/municipios_todos` | | Todos os municípios |
+| `/geojson_muni` | `municipio` (ou `todos`) | Limites municipais em GeoJSON |
+| `/geojson` | `regiao` ou `municipio`, `tolerance`, `decimals` | Polígonos dos imóveis, com nome protegido |
+| `/dados_fundiarios` | `regiao` ou `municipio` | Imóveis sem geometria, com `id_proprietario` |
+| `/geojson_assentamentos` | `municipio`, `tolerance`, `decimals` | Assentamentos em GeoJSON |
+| `/assentamentos_municipios` | | Municípios com assentamento |
+| `/geojson_reservatorios` | `municipio`, `tolerance`, `decimals` | Reservatórios em GeoJSON |
+| `/reservatorios_municipios` | | Municípios com reservatório |
+| `/versao_dados` | | Data da carga mais recente de cada tabela |
+
+Com o servidor rodando, `http://localhost:8000/docs` mostra a documentação
+interativa gerada pelo FastAPI a partir do código: dá para testar cada
+endpoint dali, com o botão **Authorize** para colar o token.
+
+~~~exercicio
+id: m05-docs
+tipo: texto
+pergunta: Em que caminho o FastAPI publica a documentação interativa (Swagger UI) da API?
+respostas:
+  - /docs
+  - docs
+  - http://localhost:8000/docs
+explicacao: "`/docs`. O contrato em JSON, no formato OpenAPI, fica em `/openapi.json` ([M12](m12-qualidade-documentacao.qmd))."
+~~~
+
+~~~exercicio
+id: m05-workers-cache
+tipo: aberta
+pergunta: |
+  O miniserver guarda a lista de regiões em `lru_cache` por 10 minutos e roda
+  com 4 workers do Gunicorn. Uma carga nova muda as regiões. O que um usuário
+  pode ver nos minutos seguintes, e por quê?
+resposta: |
+  - Cada worker é um processo com a própria memória e o próprio cache. Eles
+    expiram em momentos parecidos, porque a chave é a "janela" de tempo, mas
+    cada um consulta o banco por conta própria.
+  - Durante até 10 minutos (`CACHE_LISTAS_SEGUNDOS = 600`), uma requisição
+    pode cair num worker que ainda tem a lista antiga.
+  - Para dados que mudam uma vez por mês isso é aceitável. Para algo que
+    precisasse de consistência imediata, o cache teria de ser compartilhado
+    (Redis, por exemplo) ou invalidado por evento.
+~~~
+
+## No código
+
+- [`data_service/main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py): aplicação, middlewares e todos os endpoints.
+- [`config.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/config.py): configuração tipada.
+- [`entrypoint.sh`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/entrypoint.sh): carga e Gunicorn.
+- [`testes_api.sh`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/testes_api.sh): roteiro manual com `curl`. Ele ainda chama a API **sem** o cabeçalho `Authorization` e por isso é recusado: corrigi-lo é a prática 2.
+- [`tests/test_regioes_municipios.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_regioes_municipios.py): como os endpoints são testados.
+
+## Prática no projeto
+
+~~~exercicio
+id: m05-pratica
+tipo: checklist
+pergunta: Com o PostGIS do M4 rodando.
+itens:
+  - "Rodei o miniserver com `uvicorn data_service.main:app --reload`, com as mesmas variáveis do M4, e abri `/docs`."
+  - Gerei um token com PyJWT (com `aud` e `iss` corretos, veja o M6) e chamei três endpoints com `curl`.
+  - "Corrigi o `testes_api.sh` para enviar o cabeçalho `Authorization: Bearer ...` numa branch de estudo."
+  - "Criei o endpoint `/estatisticas_municipio?municipio=...` (quantidade de imóveis, área total e média) com teste em `tests/`."
+  - Escrevi um plano de uma página para passar as rotas para o prefixo `/v1` com `APIRouter` sem quebrar o dashboard.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Entendendo o protocolo HTTP](https://www.youtube.com/watch?v=PcHbyGVoqZk). Refatorando, 9 min, português.
+- [Vídeo]{.selo} [O que é API? REST e RESTful?](https://www.youtube.com/watch?v=ghTrp1x_1As). Rocketseat, 34 min, português.
+- [Vídeo]{.selo} [Curso de FastAPI: configuração do ambiente e hello world com testes](https://www.youtube.com/watch?v=f6bkf67lXLo). Eduardo Mendes, 2 h, português.
+- [Vídeo]{.selo} [Curso de FastAPI: fundamentos do desenvolvimento web](https://www.youtube.com/watch?v=JFJErxis_ZM). Eduardo Mendes, 1 h 42 min, português.
+- [Curso]{.selo} [FastAPI do Zero](https://fastapidozero.dunossauro.com/). Eduardo Mendes, texto e vídeos, português.
+- [Documentação]{.selo} [Tutorial do FastAPI](https://fastapi.tiangolo.com/pt/tutorial/). Português.
+- [Documentação]{.selo} [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/). Inglês.
+- [Documentação]{.selo} [Tutorial do SQLAlchemy 2.0](https://docs.sqlalchemy.org/en/20/tutorial/). Inglês.
+- [Leitura]{.selo} [Uma visão geral do HTTP](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Guides/Overview). MDN, português.
+- [Leitura]{.selo} [SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html). OWASP, inglês.
+- [Documentação]{.selo} [Gunicorn](https://docs.gunicorn.org) e [Uvicorn](https://uvicorn.dev). Inglês.
+:::

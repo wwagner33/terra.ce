@@ -1,0 +1,441 @@
+---
+title: "M6 · Segurança da aplicação"
+subtitle: "JWT, segredos, injeção de HTML e as lições dos achados do projeto"
+---
+
+::: {.ficha-modulo}
+**Duração:** 6 a 8 horas · **Obrigatório para:** todos os perfis (designers: seções 3 e 4) · **Pré-requisitos:** [M5](m05-fastapi.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+A revisão de setembro de 2026 encontrou, entre outros problemas, o
+`JWT_SECRET` real dentro da imagem Docker publicada (achado S1) e nomes vindos
+da API inseridos no mapa sem escape, o que permitiria executar JavaScript no
+navegador de quem visita o painel (S2). Os dois foram corrigidos. Este
+módulo explica os controles que existem hoje e por que cada um está ali.
+:::
+
+## Objetivos
+
+- Explicar como um JWT é montado, assinado e verificado.
+- Saber onde cada segredo do projeto vive e como trocá-lo.
+- Evitar injeção de HTML ao exibir dados de terceiros.
+- Reconhecer as outras proteções da stack: CORS, portas, usuário do container.
+
+## 1. JWT: o crachá entre o dashboard e o miniserver
+
+O miniserver só responde a quem apresenta um **JSON Web Token** válido. O
+dashboard e o Terra-AI geram esse token com um **segredo compartilhado**
+(`JWT_SECRET`), que o miniserver também conhece.
+
+Um JWT tem três partes separadas por pontos, cada uma em *base64url*:
+
+```text
+eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9 . eyJleHAiOjE3OTAwMDAwMDAsImF1ZCI6InRlcnJh... . 3q8Z...
+          cabeçalho                                carga (payload)                       assinatura
+```
+
+- O **cabeçalho** diz o algoritmo: `{"alg": "HS256", "typ": "JWT"}`.
+- A **carga** traz as *claims*: `exp` (vencimento), `iat` (emissão), `aud` (a
+  quem se destina), `iss` (quem emitiu) e `sub` (o assunto).
+- A **assinatura** é o HMAC-SHA256 de `cabeçalho.carga`, calculado com o
+  segredo.
+
+A carga **não é cifrada**: qualquer um decodifica o base64 e lê. O que o
+segredo garante é que ninguém **altera** a carga ou **fabrica** um token sem
+conhecê-lo. Quem tiver o `JWT_SECRET` consegue emitir tokens válidos, e por
+isso ele é o segredo mais sensível do projeto.
+
+```{mermaid}
+%%| fig-cap: "O ciclo de vida do token entre o dashboard e o miniserver."
+sequenceDiagram
+    participant D as Dashboard (apiCliente)
+    participant M as Miniserver (verify_token)
+    D->>D: gerarToken() assina com JWT_SECRET, exp = agora + 30 min
+    D->>M: GET /regioes com Authorization: Bearer token
+    M->>M: confere assinatura, exp, iat, aud e iss
+    M-->>D: 200 e o JSON
+    Note over D: reaproveita o token até 2 min antes de vencer
+    D->>M: GET com token vencido ou segredo trocado
+    M-->>D: 401
+    D->>D: descartarToken() e gera outro na próxima chamada
+```
+
+No miniserver, a verificação
+([`verify_token`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L37-L58)):
+
+```python
+payload = jwt.decode(
+    credentials.credentials,
+    settings.JWT_SECRET,
+    algorithms=[settings.JWT_ALGORITHM],      # só HS256: nada de "alg: none"
+    audience=settings.JWT_AUDIENCE,           # "terra-geodata-mini-server"
+    options={"require": ["exp", "iat", "aud", "iss"]},
+)
+if payload.get("iss") not in settings.JWT_ISSUERS:
+    raise jwt.InvalidIssuerError("Emissor não autorizado")
+```
+
+No dashboard, a emissão
+([`gerarToken`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/apiCliente.py#L37-L51))
+reaproveita o token até faltarem 2 minutos para vencer, com uma trava
+(`threading.Lock`) para duas threads não gerarem tokens ao mesmo tempo.
+
+~~~exercicio
+id: m06-jwt-gerar
+tipo: python
+pergunta: |
+  Monte um JWT HS256 só com a biblioteca padrão. As duas primeiras partes já
+  estão prontas; falta calcular a **assinatura**: o HMAC-SHA256 de
+  `"parte1.parte2"` com o segredo, em base64url.
+inicial: |
+  import base64, hashlib, hmac, json
+
+  def b64url(dados):
+      return base64.urlsafe_b64encode(dados).rstrip(b"=").decode("ascii")
+
+  def gerarToken(payload, segredo):
+      cabecalho = {"alg": "HS256", "typ": "JWT"}
+      parte1 = b64url(json.dumps(cabecalho, separators=(",", ":")).encode())
+      parte2 = b64url(json.dumps(payload, separators=(",", ":")).encode())
+      assinatura = b""  # calcule com hmac.new(...)
+      return f"{parte1}.{parte2}.{b64url(assinatura)}"
+
+  print(gerarToken({"sub": "streamlit_app", "aud": "terra-geodata-mini-server"}, "segredo-de-estudo"))
+solucao: |
+  import base64, hashlib, hmac, json
+
+  def b64url(dados):
+      return base64.urlsafe_b64encode(dados).rstrip(b"=").decode("ascii")
+
+  def gerarToken(payload, segredo):
+      cabecalho = {"alg": "HS256", "typ": "JWT"}
+      parte1 = b64url(json.dumps(cabecalho, separators=(",", ":")).encode())
+      parte2 = b64url(json.dumps(payload, separators=(",", ":")).encode())
+      mensagem = f"{parte1}.{parte2}".encode()
+      assinatura = hmac.new(segredo.encode(), mensagem, hashlib.sha256).digest()
+      return f"{parte1}.{parte2}.{b64url(assinatura)}"
+
+  print(gerarToken({"sub": "streamlit_app", "aud": "terra-geodata-mini-server"}, "segredo-de-estudo"))
+testes:
+  - nome: o token tem três partes
+    codigo: |
+      token = gerarToken({"sub": "x"}, "s")
+      assert token.count(".") == 2, token
+  - nome: a assinatura confere com o segredo
+    codigo: |
+      import base64, hashlib, hmac
+      token = gerarToken({"sub": "x", "iss": "dashboard_fundiario_ceara"}, "segredo-de-estudo")
+      p1, p2, p3 = token.split(".")
+      esperada = hmac.new(b"segredo-de-estudo", f"{p1}.{p2}".encode(), hashlib.sha256).digest()
+      recebida = base64.urlsafe_b64decode(p3 + "=" * (-len(p3) % 4))
+      assert hmac.compare_digest(esperada, recebida), "a assinatura não bate com HMAC-SHA256 de parte1.parte2"
+  - nome: outro segredo gera outra assinatura
+    codigo: |
+      assert gerarToken({"sub": "x"}, "a").split(".")[2] != gerarToken({"sub": "x"}, "b").split(".")[2]
+explicacao: |
+  É o que o PyJWT faz por dentro em `jwt.encode`. O cabeçalho e a carga são só
+  JSON em base64url: a segurança inteira está no HMAC com o segredo.
+~~~
+
+~~~exercicio
+id: m06-jwt-verificar
+tipo: python
+pergunta: |
+  Agora o lado do miniserver. Complete `verificarToken(token, segredo,
+  audiencia, agora)`: recalcule a assinatura e compare com
+  `hmac.compare_digest`; depois exija `exp > agora` e `aud == audiencia`. Em
+  qualquer falha, lance `ValueError`. Se tudo estiver certo, devolva a carga.
+inicial: |
+  import base64, hashlib, hmac, json
+
+  def b64decode(texto):
+      return base64.urlsafe_b64decode(texto + "=" * (-len(texto) % 4))
+
+  def verificarToken(token, segredo, audiencia, agora):
+      parte1, parte2, parte3 = token.split(".")
+      carga = json.loads(b64decode(parte2))
+      return carga  # ainda não verifica nada!
+solucao: |
+  import base64, hashlib, hmac, json
+
+  def b64decode(texto):
+      return base64.urlsafe_b64decode(texto + "=" * (-len(texto) % 4))
+
+  def verificarToken(token, segredo, audiencia, agora):
+      parte1, parte2, parte3 = token.split(".")
+      esperada = hmac.new(segredo.encode(), f"{parte1}.{parte2}".encode(), hashlib.sha256).digest()
+      if not hmac.compare_digest(esperada, b64decode(parte3)):
+          raise ValueError("assinatura inválida")
+      carga = json.loads(b64decode(parte2))
+      if carga.get("exp", 0) <= agora:
+          raise ValueError("token expirado")
+      if carga.get("aud") != audiencia:
+          raise ValueError("audiência errada")
+      return carga
+testes:
+  - nome: token válido devolve a carga
+    codigo: |
+      import base64, hashlib, hmac, json
+      def _b64(d): return base64.urlsafe_b64encode(d).rstrip(b"=").decode()
+      def _assinar(carga, segredo):
+          p1 = _b64(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()); p2 = _b64(json.dumps(carga).encode())
+          return f"{p1}.{p2}.{_b64(hmac.new(segredo.encode(), f'{p1}.{p2}'.encode(), hashlib.sha256).digest())}"
+      carga = {"exp": 2000, "aud": "terra-geodata-mini-server", "iss": "dashboard_fundiario_ceara"}
+      assert verificarToken(_assinar(carga, "s3"), "s3", "terra-geodata-mini-server", 1000)["iss"] == "dashboard_fundiario_ceara"
+  - nome: segredo errado é recusado
+    codigo: |
+      carga = {"exp": 2000, "aud": "terra-geodata-mini-server"}
+      try:
+          verificarToken(_assinar(carga, "outro"), "s3", "terra-geodata-mini-server", 1000)
+      except ValueError:
+          pass
+      else:
+          raise AssertionError("aceitou um token assinado com outro segredo")
+  - nome: carga alterada é recusada
+    codigo: |
+      p1, p2, p3 = _assinar({"exp": 2000, "aud": "terra-geodata-mini-server"}, "s3").split(".")
+      falsa = _b64(json.dumps({"exp": 9999999999, "aud": "terra-geodata-mini-server"}).encode())
+      try:
+          verificarToken(f"{p1}.{falsa}.{p3}", "s3", "terra-geodata-mini-server", 1000)
+      except ValueError:
+          pass
+      else:
+          raise AssertionError("aceitou uma carga trocada com a assinatura antiga")
+  - nome: token vencido é recusado
+    codigo: |
+      try:
+          verificarToken(_assinar({"exp": 500, "aud": "terra-geodata-mini-server"}, "s3"), "s3", "terra-geodata-mini-server", 1000)
+      except ValueError:
+          pass
+      else:
+          raise AssertionError("aceitou um token vencido")
+  - nome: token para outra API é recusado
+    codigo: |
+      try:
+          verificarToken(_assinar({"exp": 2000, "aud": "outra-api"}, "s3"), "s3", "terra-geodata-mini-server", 1000)
+      except ValueError:
+          pass
+      else:
+          raise AssertionError("aceitou um token com outra audiência")
+explicacao: |
+  `hmac.compare_digest` compara em tempo constante, sem dar pistas a quem tenta
+  adivinhar a assinatura byte a byte. A ordem importa: primeiro a
+  assinatura, depois o conteúdo da carga, que só é confiável se a assinatura
+  bater.
+~~~
+
+~~~exercicio
+id: m06-claims
+tipo: associar
+pergunta: Associe cada claim exigida pelo miniserver ao que ela protege.
+pares:
+  - termo: "`exp`"
+    definicao: Um token vazado deixa de valer depois de 30 minutos
+  - termo: "`aud`"
+    definicao: Um token emitido para outra API não é aceito aqui
+  - termo: "`iss`"
+    definicao: Só o dashboard e o Terra-AI podem emitir tokens aceitos
+  - termo: "`iat`"
+    definicao: Registra quando o token foi emitido
+explicacao: A exigência de `aud` e `iss` entrou na versão 1.2.0, junto com a configuração `JWT_ISSUERS`.
+~~~
+
+~~~exercicio
+id: m06-margem
+tipo: numero
+pergunta: O token do dashboard vale 30 minutos. Quantos minutos antes de vencer o `apiCliente` passa a gerar um token novo?
+resposta: 2
+unidade: min
+dica: Procure `_MARGEM_RENOVACAO` em `modules/apiCliente.py`.
+explicacao: A margem evita que um token vença no caminho entre o dashboard e o miniserver.
+~~~
+
+## 2. Onde os segredos vivem
+
+| Segredo | Quem usa | Em produção | No desenvolvimento |
+|---|---|---|---|
+| `JWT_SECRET` | dashboard, miniserver e Terra-AI | variável da stack no Portainer | `.streamlit/secrets.toml` ou variável no shell |
+| `POSTGRES_PASSWORD` | Postgres e miniserver | variável da stack | valor de estudo, criado por você |
+| `CARTO_API_KEY` | dashboard | variável da stack | vazia (usa OpenStreetMap) |
+| `TOKEN_GEOAPI` | importador da GeoAPI | só na hora da coleta | não use |
+| `ANTHROPIC_API_KEY` | Terra-AI | `.env` do Terra-AI | chave de estudo, com limite de gasto |
+
+As regras, todas aprendidas na prática:
+
+1. **Segredo nunca entra na imagem.** As tags 1.1.0 e 1.1.1 do dashboard
+   levaram o `secrets.toml` com o `JWT_SECRET` real, porque o Dockerfile faz
+   `COPY . .` e o `.dockerignore` não excluía o arquivo. Hoje ele exclui, e
+   a produção recebe o segredo por variável de ambiente.
+2. **Segredo nunca entra no Git.** Em agosto de 2026 foi preciso reescrever o
+   histórico dos repositórios para remover senhas antigas. Reescrever o
+   histórico não basta: o segredo exposto tem de ser **trocado**.
+3. **No `secrets.toml`, não repita uma chave que venha do ambiente.** O
+   `streamlit run` copia o arquivo para `os.environ` ao iniciar, e o valor do
+   arquivo passa por cima da variável do container. Um `CARTO_API_KEY = ""`
+   no arquivo apaga a chave de produção.
+4. **No Portainer, valores sem aspas.** Ele não trata aspas como
+   delimitador: `JWT_SECRET="abc"` vira um segredo de cinco caracteres, com
+   as aspas.
+5. **Troca anual**, e imediata em caso de suspeita, seguindo o
+   [`doc/rotacao_segredos.md`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/rotacao_segredos.md).
+   Segredo novo se gera com `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
+
+~~~exercicio
+id: m06-vazamentos
+tipo: multipla
+pergunta: Em quais destes lugares um segredo pode vazar sem ninguém perceber?
+opcoes:
+  - texto: Numa camada de imagem Docker criada por `COPY . .`
+    correta: true
+  - texto: No histórico do Git, mesmo depois de apagado o arquivo
+    correta: true
+  - texto: Num print de tela colado numa issue
+    correta: true
+  - texto: Num log que imprime a configuração ao iniciar
+    correta: true
+  - texto: Numa variável de ambiente lida pelo container em produção
+    explicacao: Esse é o lugar previsto. O cuidado é com quem tem acesso ao Portainer.
+explicacao: Os quatro primeiros são vazamentos clássicos. O primeiro aconteceu de fato no projeto.
+~~~
+
+~~~exercicio
+id: m06-streamlit-secrets
+tipo: escolha
+pergunta: |
+  O container do dashboard recebe `JWT_SECRET=valor-de-producao` do Portainer,
+  mas alguém deixou um `.streamlit/secrets.toml` com `JWT_SECRET = "valor-velho"`
+  dentro da imagem. Qual valor o dashboard usa?
+opcoes:
+  - texto: "`valor-velho`, porque o `streamlit run` copia o arquivo para o ambiente ao iniciar"
+    correta: true
+  - texto: "`valor-de-producao`, porque variável de ambiente sempre vence arquivo"
+    explicacao: Seria o esperado, mas o Streamlit inverte a precedência ao copiar o `secrets.toml` para `os.environ`.
+  - texto: Nenhum, o Streamlit recusa a configuração duplicada
+    explicacao: Não há erro. É justamente por isso que o problema passa despercebido.
+explicacao: Por isso a imagem não leva o `secrets.toml`, e o `.dockerignore` garante isso.
+~~~
+
+## 3. Injeção de HTML (XSS)
+
+O Folium monta os tooltips do mapa inserindo o texto das propriedades no HTML,
+sem escape. Se um nome de assentamento vier como
+`<img src=x onerror="alert(document.cookie)">`, o navegador executa o código.
+Isso é **XSS** (*cross-site scripting*), e o dado nem precisa ser malicioso:
+um nome com `<` e `&` já quebra o tooltip.
+
+A defesa é **escapar** todo texto vindo de fora antes de pôr num HTML, trocando
+`<` por `&lt;`, `>` por `&gt;`, `&` por `&amp;` e as aspas. O dashboard faz
+isso em
+[`privacidade.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/privacidade.py#L90-L113),
+com `escaparHtml` e `escaparPropriedades`, que copia o GeoJSON escapando cada
+propriedade de texto.
+
+~~~exercicio
+id: m06-escapar
+tipo: python
+pergunta: |
+  Complete `escaparHtml(valor)`: textos são escapados com `html.escape`
+  (inclusive aspas); números, `None` e outros tipos passam sem mudança.
+inicial: |
+  import html
+
+  def escaparHtml(valor):
+      return valor
+
+  print(escaparHtml('<img src=x onerror="alert(1)">'))
+solucao: |
+  import html
+
+  def escaparHtml(valor):
+      if isinstance(valor, str):
+          return html.escape(valor, quote=True)
+      return valor
+
+  print(escaparHtml('<img src=x onerror="alert(1)">'))
+testes:
+  - nome: tags viram texto
+    codigo: |
+      r = escaparHtml("<script>alert(1)</script>")
+      assert "<" not in r and "&lt;script&gt;" in r, r
+  - nome: aspas são escapadas
+    codigo: |
+      assert escaparHtml('a"b') == "a&quot;b", escaparHtml('a"b')
+  - nome: números e None passam sem mudança
+    codigo: |
+      assert escaparHtml(12.5) == 12.5 and escaparHtml(None) is None
+  - nome: "& vira &amp;"
+    codigo: |
+      assert escaparHtml("Silva & Filhos") == "Silva &amp; Filhos", escaparHtml("Silva & Filhos")
+explicacao: Escapar na saída, no lugar onde o texto vira HTML, é mais seguro do que tentar "limpar" na entrada.
+~~~
+
+## 4. As outras camadas
+
+- **CORS.** O miniserver aceita só `GET`. Ele hoje permite qualquer origem
+  (`ALLOWED_ORIGINS = ["*"]`), o que é aceitável porque toda rota exige token,
+  mas restringir às origens conhecidas é uma melhoria pendente.
+- **Portas.** Na stack de produção, o Postgres (5432) e o miniserver (8000)
+  só aceitam conexões da própria máquina (`127.0.0.1:...`). O dashboard fala
+  com o miniserver pela rede interna `terra_network`.
+- **Usuário do container.** As imagens rodam como o usuário `terra` (uid
+  10001), não como root. Uma falha na aplicação não dá controle da máquina.
+- **XSRF do Streamlit.** Está desligado no `config.toml` porque o app não
+  recebe upload de arquivos; religar exige testar atrás do proxy.
+- **Chave da CARTO.** Ela aparece no HTML do mapa, e tudo bem: está restrita
+  ao domínio `terrace.virtual.ufc.br` pelo cabeçalho `Referer`. Em
+  `localhost` os tiles dão 403, por isso a chave fica vazia no desenvolvimento.
+
+~~~exercicio
+id: m06-carto-vs-jwt
+tipo: aberta
+pergunta: A `CARTO_API_KEY` fica visível no HTML para qualquer visitante, mas o `JWT_SECRET` nunca pode sair do servidor. Por que essa diferença é aceitável?
+resposta: |
+  - A chave da CARTO é uma credencial **pública por natureza**: o navegador
+    precisa dela para baixar os tiles. A proteção está na restrição por
+    domínio, feita pela própria CARTO.
+  - O `JWT_SECRET` **assina** tokens. Quem o tiver fabrica tokens válidos e lê
+    toda a API, inclusive dados que só deveriam sair já protegidos.
+  - Regra geral: o que o navegador precisa usar não é segredo; o que prova
+    identidade ou dá acesso, é.
+~~~
+
+## No código
+
+- [`data_service/main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L34-L58): `verify_token`.
+- [`modules/apiCliente.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/apiCliente.py): emissão, reuso e descarte do token.
+- [`modules/config.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/config.py): ordem de leitura do `JWT_SECRET`.
+- [`modules/privacidade.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/privacidade.py): escape de HTML.
+- [`tests/test_auth.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_auth.py) e [`tests/test_config_security.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_config_security.py) do miniserver.
+- [`doc/plano_melhoria_codigo.md`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md): os achados S1 a S9.
+
+## Prática no projeto
+
+~~~exercicio
+id: m06-pratica
+tipo: checklist
+pergunta: Com o miniserver local do M5.
+itens:
+  - Gerei com PyJWT tokens com `aud` errado, sem `iss`, vencido e com emissor desconhecido; previ e conferi a resposta de cada um.
+  - Comparei os casos com `tests/test_auth.py` e acrescentei o que faltava numa branch de estudo.
+  - "Decodifiquei um token localmente com `jwt.decode(token, options={\"verify_signature\": False})` e expliquei por que não se cola token real em sites."
+  - "Construí a imagem do dashboard localmente e provei, com `podman run --rm ... ls -la .streamlit`, que ela não leva o `secrets.toml`."
+  - Li os achados S1 a S9 e escrevi como dois deles teriam sido evitados.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [JWT (JSON Web Token), Dicionário do Programador](https://www.youtube.com/watch?v=Gyq-yeot8qM). Código Fonte TV, 10 min, português.
+- [Vídeo]{.selo} [Curso de FastAPI: autenticação e autorização com tokens JWT](https://www.youtube.com/watch?v=wGZzEoO7e9s). Eduardo Mendes, 2 h, português.
+- [Vídeo]{.selo} [XSS Attack: como funciona e como prevenir](https://www.youtube.com/watch?v=2LYPyUk-L0k). Código Fonte TV, 9 min, português.
+- [Vídeo]{.selo} [O que é o OWASP Top 10?](https://www.youtube.com/watch?v=8Ao-wCaBF6o). Guia Anônima, 13 min, português.
+- [Leitura]{.selo} [RFC 7519: JSON Web Token](https://datatracker.ietf.org/doc/html/rfc7519). IETF, inglês.
+- [Leitura]{.selo} [OWASP Top 10](https://owasp.org/Top10/). Inglês.
+- [Leitura]{.selo} [Cross Site Scripting Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html). OWASP, inglês.
+- [Leitura]{.selo} [Secrets Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html). OWASP, inglês.
+- [Documentação]{.selo} [PyJWT](https://pyjwt.readthedocs.io). Inglês.
+- [Documentação]{.selo} [Gerenciamento de segredos no Streamlit](https://docs.streamlit.io/develop/concepts/connections/secrets-management). Inglês.
+- [Documentação]{.selo} [Módulo secrets](https://docs.python.org/pt-br/3/library/secrets.html). Python, português.
+:::

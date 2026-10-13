@@ -1,0 +1,328 @@
+---
+title: "M0 · O domínio fundiário e o projeto"
+subtitle: "Que perguntas a plataforma responde e o vocabulário dos dados"
+---
+
+::: {.ficha-modulo}
+**Duração:** 4 a 6 horas · **Obrigatório para:** todos os perfis · **Pré-requisitos:** nenhum
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Um erro de interpretação vira um erro de código. Quem não sabe que o Gini é
+calculado por proprietário, e não por imóvel, escreve uma consulta que parece
+certa e entrega um número errado. Este módulo dá o vocabulário mínimo para ler
+os dados, conversar com o IDACE e entender o que cada painel mostra.
+:::
+
+## Objetivos
+
+Ao fim deste módulo você vai conseguir:
+
+- explicar o que é malha fundiária, imóvel, lote e módulo fiscal;
+- classificar um imóvel em pequena, média ou grande propriedade;
+- interpretar o Índice de Gini e a curva de Lorenz;
+- dizer que pergunta cada página do dashboard responde.
+
+## 1. O projeto e quem participa
+
+A plataforma é um produto do **Projeto Cientista Chefe Terra de Governança
+Fundiária e Ambiental**, parceria entre o **IDACE** (Instituto de
+Desenvolvimento Agrário do Ceará), a **UFC** e a **Funcap**. O IDACE é o órgão
+estadual que cuida da política agrária e da regularização fundiária no Ceará:
+cadastra imóveis rurais, mede, emite títulos e mantém a base de dados que
+alimenta os painéis.
+
+A equipe técnica transforma essa base em informação pública: mapas e gráficos
+que qualquer pessoa pode consultar em <https://terrace.virtual.ufc.br/paineis>.
+
+## 2. Malha fundiária, imóvel e lote
+
+A **malha fundiária** é o conjunto dos imóveis rurais cadastrados, cada um com
+o seu polígono no mapa e um conjunto de atributos. Na base do projeto, cada
+registro da tabela `malha_fundiaria_ceara` é um **lote**: um pedaço de terra
+com geometria própria. Os atributos mais usados são:
+
+| Atributo | O que é |
+|---|---|
+| `numero_lote` | Identificação do lote no cadastro do IDACE |
+| `numero_incra` | Código do imóvel no cadastro do INCRA, quando existe |
+| `numero_titulo` | Número do título emitido, quando o imóvel já foi titulado |
+| `area` | Área do lote, em hectares |
+| `modulo_fiscal` | Tamanho do módulo fiscal do município, em hectares |
+| `situacao_juridica` | Em que ponto o imóvel está na regularização |
+| `nome_municipio`, `regiao_administrativa` | Onde o imóvel fica |
+| `nome_proprietario` | Nome do proprietário, protegido pela LGPD quando é pessoa física ([M13](m13-lgpd.qmd)) |
+
+Um **hectare** (ha) tem 10.000 m², o tamanho aproximado de um campo de futebol
+oficial.
+
+## 3. Módulo fiscal e a classificação dos imóveis
+
+O **módulo fiscal** (MF) é uma unidade de área, em hectares, fixada pelo INCRA
+para cada município. Ele representa o tamanho mínimo de uma propriedade
+economicamente viável naquela região, e por isso varia de um município para
+outro: no Brasil, vai de 5 a 110 hectares.
+
+A Lei 8.629/1993 usa o módulo fiscal para classificar os imóveis:
+
+- **pequena propriedade**: até 4 módulos fiscais;
+- **média propriedade**: acima de 4 e até 15 módulos fiscais;
+- **grande propriedade**: acima de 15 módulos fiscais.
+
+O dashboard separa ainda os imóveis com menos de 1 módulo fiscal, que o INCRA
+costuma chamar de minifúndio. A regra inteira cabe em poucas linhas de
+[`modules/classificacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/classificacao.py#L20-L30):
+
+```python
+condicoes = [
+    area < moduloFiscal,
+    area <= 4 * moduloFiscal,
+    area <= 15 * moduloFiscal,
+    area > 15 * moduloFiscal,
+]
+return np.select(condicoes, CATEGORIAS, default=SEM_CLASSIFICACAO)
+```
+
+O `np.select` testa as condições na ordem e fica com a primeira verdadeira.
+Por isso a segunda condição não precisa dizer "maior ou igual a 1 MF": quem
+tem menos de 1 MF já foi capturado pela primeira. Atenção às fronteiras: um
+imóvel com **exatamente** 4 MF é pequeno, e um com exatamente 15 MF é médio.
+
+~~~exercicio
+id: m00-classificar-associar
+tipo: associar
+pergunta: Num município com módulo fiscal de 55 ha, associe cada imóvel à sua categoria.
+pares:
+  - termo: Imóvel de 30 ha
+    definicao: Pequena Propriedade < 1 MF
+  - termo: Imóvel de 200 ha
+    definicao: Pequena Propriedade
+  - termo: Imóvel de 500 ha
+    definicao: Média Propriedade
+  - termo: Imóvel de 1.000 ha
+    definicao: Grande Propriedade
+dica: Calcule os limites primeiro. 1 MF = 55 ha, 4 MF = 220 ha e 15 MF = 825 ha.
+explicacao: |
+  30 < 55, então fica abaixo de 1 MF. 200 ≤ 220 é pequena. 500 ≤ 825 é média.
+  1.000 > 825 é grande.
+~~~
+
+~~~exercicio
+id: m00-fronteira
+tipo: escolha
+pergunta: Um imóvel tem exatamente 4 módulos fiscais. Como o dashboard o classifica?
+opcoes:
+  - texto: Pequena Propriedade
+    correta: true
+  - texto: Média Propriedade
+    explicacao: A média começa **acima** de 4 MF. A condição no código é `area <= 4 * moduloFiscal` para a pequena.
+  - texto: Sem Classificação
+    explicacao: O rótulo "Sem Classificação" é só para imóvel sem área ou sem módulo fiscal.
+explicacao: A condição `area <= 4 * moduloFiscal` inclui o limite. Exatamente 4 MF é pequena propriedade.
+~~~
+
+~~~exercicio
+id: m00-classificar-python
+tipo: python
+pergunta: |
+  Escreva a função `classificar(area, moduloFiscal)` para **um** imóvel,
+  devolvendo um destes textos: `"Pequena Propriedade < 1 MF"`,
+  `"Pequena Propriedade"`, `"Média Propriedade"` ou `"Grande Propriedade"`.
+  Use a mesma regra do dashboard.
+inicial: |
+  def classificar(area, moduloFiscal):
+      # use if/elif/else com os limites de 1, 4 e 15 módulos fiscais
+      pass
+
+  print(classificar(200, 55))
+solucao: |
+  def classificar(area, moduloFiscal):
+      if area < moduloFiscal:
+          return "Pequena Propriedade < 1 MF"
+      if area <= 4 * moduloFiscal:
+          return "Pequena Propriedade"
+      if area <= 15 * moduloFiscal:
+          return "Média Propriedade"
+      return "Grande Propriedade"
+
+  print(classificar(200, 55))
+testes:
+  - nome: 30 ha com MF de 55 ha fica abaixo de 1 MF
+    codigo: |
+      assert classificar(30, 55) == "Pequena Propriedade < 1 MF", classificar(30, 55)
+  - nome: exatamente 1 MF já é pequena propriedade
+    codigo: |
+      assert classificar(55, 55) == "Pequena Propriedade", classificar(55, 55)
+  - nome: exatamente 4 MF ainda é pequena propriedade
+    codigo: |
+      assert classificar(220, 55) == "Pequena Propriedade", classificar(220, 55)
+  - nome: exatamente 15 MF ainda é média propriedade
+    codigo: |
+      assert classificar(825, 55) == "Média Propriedade", classificar(825, 55)
+  - nome: acima de 15 MF é grande propriedade
+    codigo: |
+      assert classificar(826, 55) == "Grande Propriedade", classificar(826, 55)
+explicacao: |
+  A ordem dos `if` faz o trabalho do `np.select`: a primeira condição
+  verdadeira decide. No [M2](m02-python-dados.qmd) você vai ver por que o
+  dashboard usa a versão vetorizada com numpy.
+~~~
+
+## 4. Concentração fundiária e o Índice de Gini
+
+**Concentração fundiária** é o quanto da terra está nas mãos de poucos. O
+indicador mais usado para medi-la é o **Índice de Gini**, que vai de 0 a 1:
+
+- **0** quer dizer igualdade total: todos os proprietários têm a mesma área;
+- **1** quer dizer concentração máxima: um único proprietário tem toda a terra.
+
+O Brasil tem um dos maiores índices de concentração de terra do mundo, acima
+de 0,8 nos censos agropecuários do IBGE.
+
+A **curva de Lorenz** mostra a mesma ideia num gráfico. No eixo horizontal,
+os proprietários ordenados do menor para o maior, em porcentagem acumulada; no
+vertical, a porcentagem acumulada da área. Se a terra fosse igualmente
+dividida, a curva seria a diagonal. Quanto mais a curva se afasta da diagonal,
+maior a concentração. O Gini é o dobro da área entre a diagonal e a curva.
+
+```{mermaid}
+%%| fig-cap: "Como o dashboard chega ao Gini de um município."
+flowchart TB
+    a["Lotes do município"] --> b["Agrupa por proprietário<br/>(id_proprietario)"]
+    b --> c["Soma a área<br/>de cada proprietário"]
+    c --> d["Ordena as áreas"]
+    d --> e["Aplica a fórmula<br/>do Gini"]
+```
+
+Dois detalhes do projeto mudam o resultado e precisam ficar claros:
+
+1. **O Gini é por proprietário, não por lote.** Quem tem dez lotes pequenos é
+   um proprietário só, com a soma das áreas. Por isso o miniserver entrega o
+   `id_proprietario`, um pseudônimo que permite agrupar sem revelar o nome
+   ([M13](m13-lgpd.qmd)).
+2. **Municípios com menos de 200 imóveis** são sinalizados no mapa, porque com
+   poucos dados o índice fica instável (`LIMITE_MINIMO_IMOVEIS` em
+   [`paginaConcentracao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L27)).
+
+~~~exercicio
+id: m00-gini-igual
+tipo: numero
+pergunta: Quatro proprietários têm 50 ha cada um. Qual é o Índice de Gini?
+resposta: 0
+tolerancia: 0.0001
+explicacao: Todos com a mesma área é igualdade total, e o Gini é zero.
+~~~
+
+~~~exercicio
+id: m00-gini-por-proprietario
+tipo: escolha
+pergunta: |
+  Num município, uma pessoa tem 20 lotes de 5 ha e outras 20 pessoas têm um
+  lote de 5 ha cada. Se o Gini fosse calculado **por lote**, o que aconteceria?
+opcoes:
+  - texto: Daria zero, escondendo que uma pessoa tem 100 ha e as outras 5 ha.
+    correta: true
+  - texto: Daria o mesmo valor do cálculo por proprietário.
+    explicacao: Por proprietário, as áreas são 100 ha e vinte vezes 5 ha, que não são iguais. O Gini é maior que zero.
+  - texto: Daria 1, concentração máxima.
+    explicacao: Os 40 lotes têm a mesma área. Por lote, não há desigualdade nenhuma.
+explicacao: |
+  Todos os lotes têm 5 ha, então por lote o índice seria zero. Agrupando por
+  proprietário, aparece a concentração real. É por isso que o projeto precisa
+  do `id_proprietario`.
+~~~
+
+## 5. As outras camadas de dados
+
+| Camada | Origem e uso |
+|---|---|
+| **Assentamentos** | Projetos de reforma agrária, com código no sistema do INCRA (`cd_sipra`), número de famílias, área e forma de obtenção da terra |
+| **Reservatórios monitorados** | Açudes acompanhados pelo estado, mostrados na página de hidrografia |
+| **Escolas do campo** | Escolas em áreas rurais e de assentamento, agrupadas por CREDE (a coordenadoria regional da Secretaria da Educação) |
+| **Limites municipais** | Polígono de cada município, base de todos os mapas |
+| **Regiões administrativas** | Agrupamento dos municípios usado nos filtros |
+
+## 6. O que cada página do dashboard responde
+
+| Página | Pergunta |
+|---|---|
+| Início | O que é a plataforma e de onde vêm os dados? |
+| Gráficos e Quadros | Quantos imóveis, e quanta área, há em cada categoria de tamanho? |
+| Mapa de Predominância | Que tipo de imóvel predomina em cada município? |
+| Mapa da Malha Fundiária | Onde estão os imóveis de um município e quais são os dados de cada um? |
+| Mapa de Concentração Fundiária | Quão concentrada é a terra em cada município (Gini)? |
+| Assentamentos | Onde estão os assentamentos e quantas famílias vivem neles? |
+| Hidrografia | Onde estão os reservatórios monitorados? |
+| Escolas do Campo | Onde estão as escolas do campo, por CREDE? |
+| Sobre | Quem faz a plataforma e sob que licença? |
+
+O README do dashboard registra os requisitos como *user stories*: "Como
+usuário, quero visualizar o mapa interativo das propriedades rurais do Ceará
+para analisar a concentração fundiária" (RF01), e os requisitos não funcionais,
+como responsividade (RNF01) e desempenho (RNF02).
+
+~~~exercicio
+id: m00-camadas
+tipo: multipla
+pergunta: Quais destas informações a base do projeto **tem**?
+opcoes:
+  - texto: Área e módulo fiscal de cada imóvel
+    correta: true
+  - texto: Situação jurídica do imóvel
+    correta: true
+  - texto: Andamento do processo de regularização de cada pessoa
+    explicacao: A base é um cadastro, não um sistema de processos. O Terra-AI, por exemplo, orienta a procurar o IDACE nesses casos.
+  - texto: Número de famílias de cada assentamento
+    correta: true
+  - texto: Documentos digitalizados dos títulos
+    explicacao: A base tem o número do título, não o documento.
+explicacao: A base é cadastral. Processos e documentos ficam nos sistemas do IDACE.
+~~~
+
+~~~exercicio
+id: m00-poucos-imoveis
+tipo: aberta
+pergunta: Por que o Gini de um município com poucos imóveis é pouco confiável? O que o dashboard faz a respeito?
+resposta: |
+  - Com poucos proprietários, um único imóvel grande ou um erro de cadastro
+    muda muito o índice. A medida fica instável.
+  - O cadastro pode estar incompleto no município: o índice descreveria só a
+    parte cadastrada, não a realidade.
+  - O dashboard sinaliza os municípios com menos de 200 imóveis
+    (`LIMITE_MINIMO_IMOVEIS`), para o leitor interpretar com cautela.
+~~~
+
+## No código
+
+- [`modules/classificacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/classificacao.py): a única implementação da regra de módulo fiscal.
+- [`modules/paginaConcentracao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L34-L105): o cálculo do Gini por proprietário.
+- [`modules/paginaSobre.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaSobre.py): parceiros, licença e créditos.
+- [`terra_ai/modules/terra_ai_glossario.py`](https://github.com/wwagner33/terra.ce/blob/main/terra_ai/modules/terra_ai_glossario.py): o glossário que o Terra-AI usa para explicar termos.
+- [`README.md` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/README.md): requisitos funcionais e não funcionais.
+
+## Prática no projeto
+
+~~~exercicio
+id: m00-pratica
+tipo: checklist
+pergunta: Faça na ordem e marque ao concluir.
+itens:
+  - Naveguei por todas as páginas em https://terrace.virtual.ufc.br/paineis e escrevi, para cada uma, a pergunta que ela responde.
+  - Montei um glossário com 15 termos do domínio e comparei com o `terra_ai_glossario.py`, anotando o que falta lá.
+  - Escolhi um município no Mapa de Concentração, anotei o Gini e expliquei o número em duas frases para alguém de fora da área.
+  - Li a seção 1.2 (bugs) do `doc/plano_melhoria_codigo.md` do dashboard e escolhi um bug para explicar em voz alta.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Como medir a concentração de renda? Coeficiente de Gini](https://www.youtube.com/watch?v=XyyJVfyY1nA). Toda a Matemática, 11 min, português.
+- [Vídeo]{.selo} [Estrutura fundiária do Brasil](https://www.youtube.com/watch?v=nsW-guAeYrQ). Brasil Escola, 8 min, português.
+- [Vídeo]{.selo} [Módulo rural ou módulo fiscal?](https://www.youtube.com/watch?v=DGYX6EPklic). Minuto Geo, 2 min, português.
+- [Leitura]{.selo} [Lei 8.629/1993, art. 4º: pequena e média propriedade](https://www.planalto.gov.br/ccivil_03/leis/l8629.htm). Planalto, português.
+- [Leitura]{.selo} [Estatuto da Terra, Lei 4.504/1964, art. 50: módulo fiscal](https://www.planalto.gov.br/ccivil_03/leis/l4504.htm). Planalto, português.
+- [Leitura]{.selo} [Módulo fiscal](https://www.embrapa.br/codigo-florestal/area-de-reserva-legal-arl/modulo-fiscal). Embrapa, português.
+- [Leitura]{.selo} [Coeficiente de Gini](https://pt.wikipedia.org/wiki/Coeficiente_de_Gini). Wikipédia, português.
+- [Site]{.selo} [IDACE](https://www.idace.ce.gov.br). Instituto de Desenvolvimento Agrário do Ceará.
+:::

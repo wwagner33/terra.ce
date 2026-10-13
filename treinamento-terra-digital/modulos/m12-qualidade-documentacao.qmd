@@ -1,0 +1,345 @@
+---
+title: "M12 · Qualidade de código e documentação"
+subtitle: "Lint, convenções, dependências, versões e documentação que acompanha o código"
+---
+
+::: {.ficha-modulo}
+**Duração:** 6 a 8 horas · **Obrigatório para:** todos os perfis · **Pré-requisitos:** [M1](m01-ambiente-git.qmd), [M11](m11-testes.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+A equipe muda a cada ciclo de bolsas. O código precisa ser legível por quem
+chega depois, e a documentação precisa contar a verdade. Hoje parte dela
+não conta: o diagrama de classes do dashboard ainda mostra um leitor de CSV,
+e o diagrama de arquitetura cita login pelo Gov.br, que a plataforma não tem.
+:::
+
+## Objetivos
+
+- Usar o ruff e entender as regras configuradas no projeto.
+- Seguir as convenções de nomes de cada repositório.
+- Manter dependências fixadas e enxutas.
+- Numerar versões com o versionamento semântico.
+- Escrever commits, comentários e documentos que ajudam quem vem depois.
+
+## 1. Lint com ruff
+
+Um **linter** lê o código sem executá-lo e aponta erros prováveis: variável
+não usada, import esquecido, comparação suspeita. O dashboard usa o
+[ruff](https://docs.astral.sh/ruff/), configurado em
+[`ruff.toml`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/ruff.toml):
+
+```toml
+line-length = 130
+[lint]
+select = ["F", "E9", "B", "N", "UP", "SIM"]
+ignore = ["N802", "N803", "N806", "N815", "N816", "N999", "N818", "SIM105"]
+```
+
+```bash
+ruff check .          # lista os problemas
+ruff check . --fix    # corrige os que são seguros de corrigir sozinho
+```
+
+As regras `N8xx` que exigem snake_case estão desligadas porque o dashboard
+adotou camelCase. Quem cobra a convenção é um teste ([M11](m11-testes.qmd)).
+
+~~~exercicio
+id: m12-regras-ruff
+tipo: associar
+pergunta: Associe cada grupo de regras do ruff ao que ele procura.
+pares:
+  - termo: "`F` (Pyflakes)"
+    definicao: Nomes indefinidos, imports e variáveis sem uso
+  - termo: "`E9`"
+    definicao: Erros de sintaxe e de leitura do arquivo
+  - termo: "`B` (bugbear)"
+    definicao: Armadilhas comuns, como argumento padrão mutável
+  - termo: "`UP` (pyupgrade)"
+    definicao: Sintaxe antiga que tem forma moderna no Python 3.13
+  - termo: "`SIM`"
+    definicao: Código que pode ser escrito de forma mais simples
+explicacao: O conjunto é enxuto de propósito. Cada regra a mais tem de valer o barulho que gera.
+~~~
+
+## 2. Convenções de nomes
+
+| Onde | Convenção | Exemplo |
+|---|---|---|
+| Dashboard: funções, variáveis, parâmetros | lowerCamelCase em português, sem acento | `carregarLotes`, `moduloFiscal` |
+| Dashboard: classes | UpperCamelCase | `ErroApi`, `Pagina` |
+| Dashboard: módulos novos | lowerCamelCase | `apiCliente.py`, `camadasMapa.py` |
+| Constantes (os dois projetos) | MAIÚSCULAS_COM_SUBLINHADO | `CENTRO_CEARA`, `TTL_DADOS` |
+| Miniserver | snake_case, por enquanto | `verify_token`, `fetch_regioes` |
+| Exceções | nomes de bibliotecas, colunas e chaves JSON da API, prefixo `test_` | `nome_municipio`, `requests_mock` |
+
+A PEP 8 recomenda snake_case em Python. O dashboard escolheu camelCase em
+setembro de 2026 (decisão D-4), por familiaridade da equipe, e o miniserver
+mantém o snake_case até nova decisão (D-9). O importante é **um padrão por
+repositório**, verificado automaticamente.
+
+~~~exercicio
+id: m12-camelcase
+tipo: python
+pergunta: |
+  Escreva `nomesForaDoPadrao(codigo)`, que usa o módulo `ast` para listar as
+  **funções** de um código cujo nome não seja lowerCamelCase (pode começar com
+  `_`). Nomes de teste no formato `test_` + camelCase são aceitos.
+inicial: |
+  import ast, re
+
+  CAMEL = re.compile(r"^_?[a-z][a-zA-Z0-9]*$")
+  TESTE = re.compile(r"^test_[a-z0-9][a-zA-Z0-9]*$")
+
+  def nomesForaDoPadrao(codigo):
+      arvore = ast.parse(codigo)
+      return []
+
+  exemplo = """
+  def carregarLotes(): pass
+  def carregar_lotes(): pass
+  def _normalizarTexto(): pass
+  def test_fronteiraDeQuatroModulos(): pass
+  def CalcularGini(): pass
+  """
+  print(nomesForaDoPadrao(exemplo))
+solucao: |
+  import ast, re
+
+  CAMEL = re.compile(r"^_?[a-z][a-zA-Z0-9]*$")
+  TESTE = re.compile(r"^test_[a-z0-9][a-zA-Z0-9]*$")
+
+  def nomesForaDoPadrao(codigo):
+      arvore = ast.parse(codigo)
+      ruins = []
+      for no in ast.walk(arvore):
+          if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
+              if not (CAMEL.match(no.name) or TESTE.match(no.name)):
+                  ruins.append(no.name)
+      return ruins
+
+  exemplo = """
+  def carregarLotes(): pass
+  def carregar_lotes(): pass
+  def _normalizarTexto(): pass
+  def test_fronteiraDeQuatroModulos(): pass
+  def CalcularGini(): pass
+  """
+  print(nomesForaDoPadrao(exemplo))
+testes:
+  - nome: aponta snake_case e UpperCamelCase em funções
+    codigo: |
+      import textwrap
+      assert sorted(nomesForaDoPadrao(textwrap.dedent(exemplo))) == ["CalcularGini", "carregar_lotes"], nomesForaDoPadrao(textwrap.dedent(exemplo))
+  - nome: aceita privadas e testes
+    codigo: |
+      assert nomesForaDoPadrao("def _a(): pass\ndef test_bCd(): pass\n") == []
+  - nome: encontra funções dentro de classes
+    codigo: |
+      assert nomesForaDoPadrao("class Pagina:\n    def renderizar_tudo(self): pass\n") == ["renderizar_tudo"]
+explicacao: |
+  É uma versão reduzida de `tests/test_convencaoNomes.py`, que também confere
+  variáveis, parâmetros, classes, constantes e nomes de módulo.
+~~~
+
+## 3. Comentários que ajudam
+
+Um bom comentário explica **por que**, não **o que**: o código já diz o que
+faz. Compare:
+
+```python
+# Ruim: repete o código
+# soma 2 minutos
+_MARGEM_RENOVACAO = timedelta(minutes=2)
+
+# Bom: explica uma decisão que o código não mostra
+# O nome é sempre explícito: se deixado a cargo do folium, o rótulo da camada
+# no controle de camadas passaria a ser a própria URL do tile, expondo a API key.
+```
+
+O segundo exemplo é da docstring de `adicionarBasemap`. Outros bons exemplos
+no projeto: o comentário sobre por que `"SA"` sem pontuação não conta como
+pessoa jurídica (Sá é sobrenome) em `privacidade.py`, e a explicação da ordem
+de importação no `conftest.py` do miniserver.
+
+~~~exercicio
+id: m12-comentario
+tipo: escolha
+pergunta: Qual é o melhor comentário para a linha `if quantidade and quantidade < LIMITE_MINIMO_IMOVEIS:` em `estiloGini`?
+opcoes:
+  - texto: "`# Com menos de 200 imóveis o Gini oscila demais; pinta com cor própria para o leitor desconfiar.`"
+    correta: true
+  - texto: "`# Verifica se a quantidade é menor que o limite.`"
+    explicacao: Repete o código em português e não acrescenta nada.
+  - texto: "`# TODO: revisar isso depois.`"
+    explicacao: Não diz o que revisar nem por quê. TODOs sem contexto viram ruído permanente.
+explicacao: O bom comentário registra a razão da regra, que não está escrita em lugar nenhum do código.
+~~~
+
+## 4. Dependências enxutas e fixadas
+
+Os dois projetos separam as dependências **diretas** (`requirements.in`) da
+lista completa **fixada** (`requirements.txt`). O procedimento de atualização
+está no topo do próprio `requirements.in`:
+
+```bash
+pip install -U -r requirements.in   # atualiza o ambiente
+python -m pytest                    # confere que nada quebrou
+python scripts/fixarDependencias.py # regrava o requirements.txt com as versões instaladas
+```
+
+O script
+([`fixarDependencias.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/scripts/fixarDependencias.py))
+percorre as dependências transitivas pelos metadados dos pacotes instalados e
+grava cada uma com a versão exata.
+
+Toda dependência tem custo: tamanho da imagem, tempo de instalação, superfície
+para vulnerabilidades. O `requirements.in` do miniserver ainda lista
+**APScheduler** e **GeoAlchemy2**, que o código não usa mais.
+
+## 5. Versionamento semântico
+
+Uma versão `MAIOR.MENOR.CORREÇÃO`, como `1.2.0`, comunica o tipo de mudança:
+
+- **CORREÇÃO** (1.1.0 → 1.1.1): corrige erro sem mudar o comportamento esperado;
+- **MENOR** (1.1.1 → 1.2.0): acrescenta algo compatível com o que existia;
+- **MAIOR** (1.2.0 → 2.0.0): quebra a compatibilidade, e quem usa precisa se adaptar.
+
+Dashboard e miniserver são lançados **juntos**, com a mesma versão, porque o
+contrato entre eles muda junto: a 1.2.0 do miniserver passou a exigir `aud` e
+`iss` no JWT, e só a 1.2.0 do dashboard os envia.
+
+~~~exercicio
+id: m12-semver
+tipo: associar
+pergunta: A versão atual é 1.2.0. Que versão cada mudança deveria gerar?
+pares:
+  - termo: Corrigir um erro de digitação num rótulo do mapa
+    definicao: "1.2.1"
+  - termo: Acrescentar o endpoint `/estatisticas_municipio`, sem mudar os outros
+    definicao: "1.3.0"
+  - termo: Mover todas as rotas para o prefixo `/v1`, removendo as antigas
+    definicao: "2.0.0"
+explicacao: Mover as rotas sem manter as antigas quebra o dashboard e o Terra-AI. Mantendo as duas por um tempo, a mudança seria MENOR.
+~~~
+
+## 6. Commits e revisões
+
+As mensagens de commit do projeto são **curtas e dizem o que mudou**:
+"Corrige a duplicação de assentamentos", "Move o roteiro de implantação para
+a raiz". O porquê detalhado vai na descrição do pull request, não no
+histórico.
+
+A revisão de código usa o formato do
+[`plano_melhoria_codigo.md`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md):
+cada achado tem um identificador, severidade, descrição, local exato
+(`arquivo:linha`) e situação. O [manual de revisão](../manual/revisao.qmd)
+detalha o processo.
+
+~~~exercicio
+id: m12-commits
+tipo: multipla
+pergunta: Quais mensagens de commit seguem o estilo do projeto?
+opcoes:
+  - texto: "Adiciona a página de imóveis por região"
+    correta: true
+  - texto: "Corrige o filtro de municípios das Escolas do Campo"
+    correta: true
+  - texto: "ajustes"
+    explicacao: Não diz o que mudou. Daqui a seis meses ninguém saberá.
+  - texto: "Hoje eu investiguei o bug por duas horas, testei três soluções, a terceira funcionou e mudei o arquivo X"
+    explicacao: O processo vai na conversa ou no PR; o commit registra a mudança.
+  - texto: "Atualiza o submódulo do dashboard"
+    correta: true
+explicacao: Título curto, no presente, dizendo o que o commit faz.
+~~~
+
+## 7. Documentação como código
+
+A documentação mora **no repositório**, ao lado do código, e muda no mesmo
+pull request:
+
+| Documento | Para quê | Exemplo |
+|---|---|---|
+| README | instalar, configurar e entender a estrutura | `dashboard_fundiario_ceara/README.md` |
+| Roteiro de operação | passos exatos para uma tarefa arriscada | `IMPLANTACAO_PORTAINER.md`, `doc/rotacao_segredos.md` |
+| Requisitos | o que o sistema deve fazer | as *user stories* RF01 a RF04 no README |
+| Diagramas PlantUML | arquitetura, casos de uso, atividades, classes | `doc/*.puml` |
+| Contrato da API | endpoints, parâmetros e respostas | `doc/spec.yaml` (OpenAPI) e `/openapi.json` |
+| Registro de decisões | o que foi decidido, quando e por quê | as decisões D-1 a D-9 no plano de melhoria |
+
+Diagramas em texto (PlantUML, Mermaid) entram no Git e na revisão como código.
+Este site usa Mermaid; os repositórios usam PlantUML.
+
+Há um risco: documento escrito à mão envelhece. O `doc/spec.yaml` do miniserver
+foi escrito para a versão 1.0.0, e o FastAPI gera sozinho um contrato sempre
+atualizado em `/openapi.json`.
+
+~~~exercicio
+id: m12-tabela-padrao
+tipo: texto
+pergunta: |
+  Abra o `config.py` do miniserver e o `docker-compose.stack.yml` do
+  superprojeto. Qual é o valor **padrão** de `TABLE_DADOS_RESERVATORIOS` no
+  `config.py`?
+respostas:
+  - reseratorios_ceara
+dica: Compare letra por letra com o valor da stack, `reservatorios_ceara`.
+explicacao: |
+  O padrão do `config.py` é `reseratorios_ceara`, com um "v" a menos. Em
+  produção não faz diferença, porque a stack define o nome certo. Mas quem
+  rodar o miniserver só com o `config.py` cria a tabela com o nome errado, e o
+  Terra-AI ou um script que use o nome certo não a encontra. Um bom primeiro
+  pull request.
+~~~
+
+~~~exercicio
+id: m12-openapi
+tipo: aberta
+pergunta: O `doc/spec.yaml` (escrito à mão) e o `/openapi.json` (gerado pelo FastAPI) descrevem a mesma API. Qual deve ser a fonte da verdade, e o que fazer com o outro?
+resposta: |
+  - A fonte da verdade deve ser o **código**: o `/openapi.json` é gerado dele
+    e não envelhece. Melhorar as descrições nos `Query(..., description=...)`
+    e nas docstrings melhora o contrato automaticamente.
+  - O `spec.yaml` pode ser removido, ou regerado a partir do `/openapi.json`
+    num passo da integração contínua, para quem precisa do arquivo.
+  - Um teste de contrato pode comparar o `/openapi.json` com o que o dashboard
+    espera, pegando quebras antes da implantação.
+~~~
+
+## No código
+
+- [`ruff.toml`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/ruff.toml) e [`tests/test_convencaoNomes.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/test_convencaoNomes.py) do dashboard.
+- [`requirements.in` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/requirements.in): dependências diretas, inclusive as sem uso.
+- [`doc/` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/tree/v1.2.0/doc): diagramas PlantUML, plano de melhoria e rotação de segredos.
+- [`doc/spec.yaml` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/doc/spec.yaml): o contrato escrito à mão.
+
+## Prática no projeto
+
+~~~exercicio
+id: m12-pratica
+tipo: checklist
+pergunta: Numa branch de estudo.
+itens:
+  - Renderizei os diagramas `.puml` do dashboard (extensão do VS Code ou plantuml.com) e listei o que não corresponde mais à 1.2.0.
+  - Atualizei um dos diagramas para a arquitetura atual.
+  - "Comparei o `doc/spec.yaml` com o `/openapi.json` do miniserver local e listei as divergências."
+  - Confirmei com `grep` que APScheduler e GeoAlchemy2 não são usados e preparei a remoção seguindo o procedimento do `requirements.in`.
+  - "Corrigi o padrão de `TABLE_DADOS_RESERVATORIOS` no `config.py` e rodei os testes."
+  - Revisei um pull request de colega usando o formato de achados.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Code review, Dicionário do Programador](https://www.youtube.com/watch?v=_7W9pqWPyfc). Código Fonte TV, 14 min, português.
+- [Vídeo]{.selo} [Ruff: a fast linter and formatter](https://www.youtube.com/watch?v=828S-DMQog8). Corey Schafer, 36 min, inglês.
+- [Vídeo]{.selo} [O que é SEMVER e como entender versões de bibliotecas](https://www.youtube.com/watch?v=sgheXCK-Rfw). Filho da Nuvem, 14 min, português.
+- [Vídeo]{.selo} [Using PlantUML in VSCode](https://www.youtube.com/watch?v=xkwJ9GwgZJU). Christopher Fuhrman, 6 min, inglês.
+- [Leitura]{.selo} [Versionamento Semântico 2.0.0](https://semver.org/lang/pt-BR/). Português.
+- [Leitura]{.selo} [PEP 8](https://peps.python.org/pep-0008/). Python, inglês.
+- [Leitura]{.selo} [Google Engineering Practices: code review](https://google.github.io/eng-practices/review/). Inglês.
+- [Leitura]{.selo} [Docs as Code](https://www.writethedocs.org/guide/docs-as-code/). Write the Docs, inglês.
+- [Documentação]{.selo} [ruff](https://docs.astral.sh/ruff/), [PlantUML](https://plantuml.com/) e [OpenAPI](https://spec.openapis.org/oas/latest.html).
+:::

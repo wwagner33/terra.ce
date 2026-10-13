@@ -1,0 +1,271 @@
+---
+title: "Como estudar com este material"
+subtitle: "O formato dos módulos, os tipos de atividade e as regras de segurança"
+---
+
+## Para quem é
+
+O Terra Digital forma quem vai desenvolver, manter e cuidar do design da
+Plataforma Terra.Ce: bolsistas, desenvolvedores e designers que chegam ao
+projeto. O ponto de partida é Python básico (variáveis, funções, listas e
+dicionários) e alguma familiaridade com o terminal. Quem ainda não tem essa
+base deve começar pelos vídeos indicados no [M1](../modulos/m01-ambiente-git.qmd)
+e no [M2](../modulos/m02-python-dados.qmd).
+
+Tudo aqui usa o código real do projeto, na versão 1.2.0 do
+`terraGeoDataMiniServer` e do `dashboard_fundiario_ceara`. Quando um módulo
+mostra um trecho de código, ele vem desses repositórios.
+
+## Como cada módulo está organizado
+
+Todo módulo segue o mesmo roteiro:
+
+1. **Ficha**: duração estimada, perfis para os quais é obrigatório e pré-requisitos.
+2. **Por que isso importa no Terra.Ce**: o problema real que o assunto resolve.
+3. **Explicação**: o conceito, com exemplos do projeto.
+4. **No código**: onde o assunto aparece nos repositórios, com links para o GitHub.
+5. **Exercícios autocorrigidos**: você responde e o site corrige na hora.
+6. **Prática no projeto**: tarefas que rodam na sua máquina, marcadas como concluídas por você.
+7. **Para aprofundar**: vídeos, artigos, documentação e livros, com o idioma indicado.
+
+::: {.callout-tip}
+## Ritmo sugerido
+Cada módulo cabe em uma semana de 8 a 10 horas. Leia a explicação, faça os
+exercícios, depois a prática no projeto. Os vídeos são complemento: use-os
+quando um conceito não ficar claro no texto. O [cronograma](cronograma.qmd)
+distribui os módulos em 12 semanas.
+:::
+
+## Os tipos de atividade
+
+Os exercícios abaixo servem para você conhecer a interface. Todos são sobre
+este próprio material.
+
+### Escolha uma opção
+
+Clique na opção e depois em **Verificar**. Depois da primeira tentativa aparece
+o botão **Ver solução**.
+
+~~~exercicio
+id: guia-escolha
+tipo: escolha
+pergunta: Onde o seu progresso nos exercícios fica guardado?
+opcoes:
+  - texto: Num servidor da UFC, associado ao seu e-mail.
+    explicacao: O site não tem login nem servidor próprio. Ele é um conjunto de páginas estáticas.
+  - texto: No armazenamento local do seu navegador.
+    correta: true
+  - texto: Num arquivo dentro do repositório do Git.
+    explicacao: O repositório guarda o material, não as respostas de quem estuda.
+explicacao: |
+  O progresso fica no `localStorage` do navegador. Se você trocar de
+  computador ou de navegador, use a página [Meu progresso](../progresso.qmd)
+  para baixar e depois carregar um arquivo com o seu progresso.
+~~~
+
+### Marque todas as corretas
+
+~~~exercicio
+id: guia-multipla
+tipo: multipla
+pergunta: Quais destes itens aparecem em todos os módulos?
+opcoes:
+  - texto: Exercícios autocorrigidos
+    correta: true
+  - texto: Links para aprofundar
+    correta: true
+  - texto: Prova presencial com nota
+    explicacao: Não há prova. A avaliação é o projeto integrador e a revisão das entregas.
+  - texto: Prática no projeto real
+    correta: true
+explicacao: Exercícios, prática e links para aprofundar fazem parte do roteiro fixo de cada módulo.
+~~~
+
+### Resposta numérica
+
+Pode usar vírgula ou ponto como separador decimal.
+
+~~~exercicio
+id: guia-numero
+tipo: numero
+pergunta: Quantas semanas tem o cronograma sugerido do treinamento?
+resposta: 12
+unidade: semanas
+dica: Está na seção "Ritmo sugerido", logo acima.
+explicacao: São 12 semanas. As duas últimas ficam para o projeto integrador.
+~~~
+
+### Resposta curta
+
+Maiúsculas, acentos e espaços extras não contam.
+
+~~~exercicio
+id: guia-texto
+tipo: texto
+pergunta: Qual é o nome do backend da plataforma, o serviço FastAPI que entrega os dados?
+respostas:
+  - terraGeoDataMiniServer
+  - terra geodata mini server
+  - miniserver
+dica: É o submódulo que fica ao lado do `dashboard_fundiario_ceara`.
+explicacao: É o `terraGeoDataMiniServer`, que a equipe chama de miniserver.
+~~~
+
+### Coloque em ordem
+
+Use as setas para mover os itens.
+
+~~~exercicio
+id: guia-ordenar
+tipo: ordenar
+pergunta: Ordene as etapas de estudo de um módulo.
+itens:
+  - Ler a explicação
+  - Fazer os exercícios autocorrigidos
+  - Fazer a prática no projeto
+  - Explorar os links para aprofundar
+explicacao: Primeiro o conceito, depois a fixação, depois a prática. Os links servem para ir além.
+~~~
+
+### Associe as colunas
+
+~~~exercicio
+id: guia-associar
+tipo: associar
+pergunta: Associe cada parte da plataforma ao que ela faz.
+pares:
+  - termo: "`dashboard_fundiario_ceara`"
+    definicao: Painéis com mapas e gráficos, em Streamlit
+  - termo: "`terraGeoDataMiniServer`"
+    definicao: API que lê o PostGIS e entrega JSON
+  - termo: "`terra_ai`"
+    definicao: Assistente que responde perguntas usando a API
+  - termo: PostgreSQL + PostGIS
+    definicao: Banco de dados com suporte a geometrias
+explicacao: Essas quatro peças aparecem o tempo todo no treinamento.
+~~~
+
+### Código Python
+
+O Python roda no seu navegador, sem instalar nada. Na primeira execução o site
+baixa o interpretador e as bibliotecas, o que leva alguns segundos. **Executar**
+só roda o código; **Verificar** roda o código e as verificações automáticas.
+
+~~~exercicio
+id: guia-python
+tipo: python
+pergunta: |
+  Complete a função `saudacao` para que ela devolva `"Olá, Terra.Ce!"`
+  quando receber `"Terra.Ce"`.
+inicial: |
+  def saudacao(nome):
+      # troque a linha abaixo
+      return ""
+
+  print(saudacao("Terra.Ce"))
+solucao: |
+  def saudacao(nome):
+      return f"Olá, {nome}!"
+
+  print(saudacao("Terra.Ce"))
+testes:
+  - nome: devolve a saudação para "Terra.Ce"
+    codigo: |
+      assert saudacao("Terra.Ce") == "Olá, Terra.Ce!", f"devolveu {saudacao('Terra.Ce')!r}"
+  - nome: funciona com outro nome
+    codigo: |
+      assert saudacao("IDACE") == "Olá, IDACE!", f"devolveu {saudacao('IDACE')!r}"
+explicacao: Uma f-string monta o texto com o nome recebido.
+~~~
+
+### Consulta SQL
+
+As consultas rodam num SQLite dentro do navegador, sobre um banco sintético
+com três tabelas: `municipios`, `lotes` e `assentamentos`. Os municípios
+existem; áreas, módulos fiscais e assentamentos são fictícios. Detalhes no
+[M4](../modulos/m04-postgis.qmd).
+
+~~~exercicio
+id: guia-sql
+tipo: sql
+dados: fundiario
+pergunta: Liste o nome e a região de todos os municípios da tabela `municipios`.
+inicial: |
+  SELECT *
+  FROM municipios;
+solucao: |
+  SELECT nome, regiao
+  FROM municipios;
+dica: Troque o `*` pelos nomes das duas colunas, separados por vírgula.
+explicacao: Escolher só as colunas necessárias deixa a consulta mais clara e mais leve.
+~~~
+
+### Resposta aberta
+
+Algumas perguntas pedem argumentação. Escreva sua resposta, compare com a
+resposta comentada e marque se cobriu os pontos principais. Leve as respostas
+abertas para conversar com quem acompanha o seu treinamento.
+
+~~~exercicio
+id: guia-aberta
+tipo: aberta
+pergunta: Por que um treinamento baseado no código real do projeto é mais útil do que exemplos genéricos?
+resposta: |
+  Pontos esperados:
+
+  - você aprende as convenções e as decisões que vai encontrar no dia a dia;
+  - os erros e correções reais (como os achados do plano de melhoria) mostram por que cada boa prática existe;
+  - a prática já produz algo útil para a plataforma.
+~~~
+
+### Prática guiada
+
+A prática no projeto não tem correção automática: marque cada passo quando
+concluir.
+
+~~~exercicio
+id: guia-checklist
+tipo: checklist
+pergunta: Antes de começar o M0, confira.
+itens:
+  - Li as regras de segurança desta página.
+  - Sei onde fica a página [Meu progresso](../progresso.qmd).
+  - Tenho acesso de leitura aos repositórios no GitHub.
+~~~
+
+## Regras de segurança
+
+::: {.callout-warning}
+## Leia antes de qualquer prática
+- **Dados pessoais.** Os CSVs de `terraGeoDataMiniServer/datasets/` não estão
+  no Git e trazem nomes de pessoas físicas. Peça os arquivos à coordenação,
+  mantenha-os só na máquina de trabalho e nunca os envie para repositórios
+  pessoais, nuvens particulares ou ferramentas de IA externas.
+- **Segredos.** Use valores de mentira. Gere um `JWT_SECRET` local com
+  `python -c "import secrets; print(secrets.token_urlsafe(48))"` e nunca copie
+  valores da stack de produção.
+- **Mapa local.** Deixe `CARTO_API_KEY` vazia em `localhost`: a chave só vale
+  para `terrace.virtual.ufc.br`, e sem ela o mapa usa o OpenStreetMap.
+- **Produção.** Não altere a stack do Portainer nem as imagens do Docker Hub.
+  As práticas de implantação usam containers locais.
+:::
+
+## Seu progresso
+
+O site lembra o que você já resolveu usando o armazenamento local do
+navegador. Isso tem três consequências:
+
+- numa janela anônima o progresso some ao fechar a janela;
+- em outro computador ou navegador você começa do zero, a menos que leve o
+  arquivo baixado em [Meu progresso](../progresso.qmd);
+- ninguém além de você vê suas respostas. Para mostrar seu andamento a quem
+  acompanha o treinamento, envie o arquivo baixado.
+
+## Como pedir ajuda
+
+- Dúvida sobre o conteúdo: anote e leve para o encontro com quem acompanha o
+  seu treinamento.
+- Erro no material (link quebrado, exercício com resposta errada): use o link
+  **Relatar um problema** no rodapé de cada página. Ele abre uma *issue* no
+  GitHub. Melhor ainda: corrija e mande um pull request, como explica o
+  [manual de contribuição](../manual/material-didatico.qmd).
