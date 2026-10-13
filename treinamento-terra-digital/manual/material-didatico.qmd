@@ -21,7 +21,7 @@ treinamento-terra-digital/
 ├── _quarto.yml                 # configuração do site: menu, tema, filtros
 ├── index.qmd                   # página inicial
 ├── comece/                     # como estudar, cronograma
-├── modulos/                    # M0 a M16
+├── modulos/                    # M0 a M15
 ├── manual/                     # este manual de contribuição
 ├── projeto-integrador.qmd, glossario.qmd, referencias.qmd, progresso.qmd
 ├── estilos/                    # terra.scss, terra-escuro.scss (cores) e comum.css (layout)

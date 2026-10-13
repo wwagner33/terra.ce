@@ -138,8 +138,8 @@ pares:
     definicao: Painéis com mapas e gráficos, em Streamlit
   - termo: "`terraGeoDataMiniServer`"
     definicao: API que lê o PostGIS e entrega JSON
-  - termo: "`terra_ai`"
-    definicao: Assistente que responde perguntas usando a API
+  - termo: GeoAPI do IDACE
+    definicao: Fonte da malha fundiária, de onde os importadores coletam os dados
   - termo: PostgreSQL + PostGIS
     definicao: Banco de dados com suporte a geometrias
 explicacao: Essas quatro peças aparecem o tempo todo no treinamento.

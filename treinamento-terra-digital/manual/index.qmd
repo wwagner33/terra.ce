@@ -15,7 +15,7 @@ a produção sem passar pela coordenação.
 |---|---|---|
 | `dashboard_fundiario_ceara` | o dashboard Streamlit: páginas, mapas, CSS, imagens | [Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara) |
 | `terraGeoDataMiniServer` | a API FastAPI e os importadores de dados | [Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer) |
-| `terra.ce` (superprojeto) | os dois acima como submódulos, a stack de produção, o Terra-AI e **este material** | [wwagner33/terra.ce](https://github.com/wwagner33/terra.ce) |
+| `terra.ce` (superprojeto) | os dois acima como submódulos, a stack de produção e **este material** | [wwagner33/terra.ce](https://github.com/wwagner33/terra.ce) |
 
 Uma mudança no dashboard é um pull request no repositório do dashboard. Depois
 do merge, outro pull request, pequeno, atualiza o ponteiro do submódulo no

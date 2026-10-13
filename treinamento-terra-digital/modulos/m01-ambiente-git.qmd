@@ -165,7 +165,7 @@ flowchart TB
     s["terra.ce (superprojeto)<br/>commit 9897bd2"]
     s -->|"aponta para 997f558 (v1.2.0)"| d["dashboard_fundiario_ceara<br/>github.com/Projeto-Cientista-Chefe-Terra"]
     s -->|"aponta para d0859cc (v1.2.0)"| m["terraGeoDataMiniServer<br/>github.com/Projeto-Cientista-Chefe-Terra"]
-    s --- r["docker-compose.stack.yml<br/>IMPLANTACAO_PORTAINER.md<br/>terra_ai/"]
+    s --- r["docker-compose.stack.yml<br/>IMPLANTACAO_PORTAINER.md<br/>treinamento-terra-digital/"]
 ```
 
 O ponto central: **o superprojeto guarda um commit específico de cada

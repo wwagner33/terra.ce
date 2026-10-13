@@ -78,9 +78,6 @@ website:
           - modulos/m13-lgpd.qmd
           - modulos/m14-containers.qmd
           - modulos/m15-integracao-continua.qmd
-      - section: "IA aplicada"
-        contents:
-          - modulos/m16-terra-ai.qmd
       - projeto-integrador.qmd
       - section: "Manual de contribuição"
         contents:

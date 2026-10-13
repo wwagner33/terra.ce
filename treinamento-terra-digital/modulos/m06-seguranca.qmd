@@ -26,7 +26,7 @@ módulo explica os controles que existem hoje e por que cada um está ali.
 ## 1. JWT: o crachá entre o dashboard e o miniserver
 
 O miniserver só responde a quem apresenta um **JSON Web Token** válido. O
-dashboard e o Terra-AI geram esse token com um **segredo compartilhado**
+dashboard gera esse token com um **segredo compartilhado**
 (`JWT_SECRET`), que o miniserver também conhece.
 
 Um JWT tem três partes separadas por pontos, cada uma em *base64url*:
@@ -236,7 +236,7 @@ pares:
   - termo: "`aud`"
     definicao: Um token emitido para outra API não é aceito aqui
   - termo: "`iss`"
-    definicao: Só o dashboard e o Terra-AI podem emitir tokens aceitos
+    definicao: Só os emissores autorizados, como o dashboard, têm tokens aceitos
   - termo: "`iat`"
     definicao: Registra quando o token foi emitido
 explicacao: A exigência de `aud` e `iss` entrou na versão 1.2.0, junto com a configuração `JWT_ISSUERS`.
@@ -256,11 +256,10 @@ explicacao: A margem evita que um token vença no caminho entre o dashboard e o 
 
 | Segredo | Quem usa | Em produção | No desenvolvimento |
 |---|---|---|---|
-| `JWT_SECRET` | dashboard, miniserver e Terra-AI | variável da stack no Portainer | `.streamlit/secrets.toml` ou variável no shell |
+| `JWT_SECRET` | dashboard e miniserver | variável da stack no Portainer | `.streamlit/secrets.toml` ou variável no shell |
 | `POSTGRES_PASSWORD` | Postgres e miniserver | variável da stack | valor de estudo, criado por você |
 | `CARTO_API_KEY` | dashboard | variável da stack | vazia (usa OpenStreetMap) |
 | `TOKEN_GEOAPI` | importador da GeoAPI | só na hora da coleta | não use |
-| `ANTHROPIC_API_KEY` | Terra-AI | `.env` do Terra-AI | chave de estudo, com limite de gasto |
 
 As regras, todas aprendidas na prática:
 

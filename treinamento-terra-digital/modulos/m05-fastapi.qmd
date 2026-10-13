@@ -4,12 +4,12 @@ subtitle: "HTTP, o miniserver por dentro e como acrescentar um endpoint"
 ---
 
 ::: {.ficha-modulo}
-**Duração:** 8 a 10 horas · **Obrigatório para:** backend e banco · **Recomendado para:** dados e painéis, infraestrutura, IA · **Pré-requisitos:** [M4](m04-postgis.qmd)
+**Duração:** 8 a 10 horas · **Obrigatório para:** backend e banco · **Recomendado para:** dados e painéis, infraestrutura · **Pré-requisitos:** [M4](m04-postgis.qmd)
 :::
 
 ::: {.callout-note appearance="simple"}
 ## Por que isso importa no Terra.Ce
-O dashboard e o Terra-AI não falam com o banco: falam com o
+O dashboard não fala com o banco: fala com o
 `terraGeoDataMiniServer`, uma API FastAPI somente leitura. Toda informação nova
 nos painéis começa com um endpoint novo ou alterado. Entender a API também
 ajuda a diagnosticar o caso mais comum de erro em produção: "Não foi possível
@@ -298,7 +298,7 @@ class Settings(BaseSettings):
     DATABASE_TYPE: DatabaseType          # obrigatório, só aceita sqlite ou postgres
     POSTGRES_PASSWORD: str               # obrigatório
     POSTGRES_PORT: int = 5432            # opcional, com padrão
-    JWT_ISSUERS: Annotated[List[str], NoDecode] = ["dashboard_fundiario_ceara", "terra_ai"]
+    ALLOWED_ORIGINS: Annotated[List[str], NoDecode] = ["*"]
 
 settings = Settings()
 ```
@@ -307,7 +307,7 @@ O Pydantic lê cada valor do ambiente (ou do `.env`), converte para o tipo
 declarado e falha **na inicialização** se faltar um obrigatório ou se um valor
 for inválido. É melhor falhar ao subir o container do que no meio de uma
 requisição. O `NoDecode` com um validador permite escrever listas como
-`JWT_ISSUERS=dashboard_fundiario_ceara,terra_ai`, sem JSON.
+`ALLOWED_ORIGINS=https://terrace.virtual.ufc.br,http://localhost:8501`, sem JSON.
 
 Repare na última linha: `settings` é criado **quando o módulo é importado**.
 Por isso os testes precisam definir as variáveis de ambiente antes de

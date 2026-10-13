@@ -4,12 +4,12 @@ subtitle: "O modelo de execução, o cache e a arquitetura do dashboard"
 ---
 
 ::: {.ficha-modulo}
-**Duração:** 8 a 10 horas · **Obrigatório para:** dados e painéis, IA, design · **Recomendado para:** backend · **Pré-requisitos:** [M2](m02-python-dados.qmd), [M5](m05-fastapi.qmd)
+**Duração:** 8 a 10 horas · **Obrigatório para:** dados e painéis, design · **Recomendado para:** backend · **Pré-requisitos:** [M2](m02-python-dados.qmd), [M5](m05-fastapi.qmd)
 :::
 
 ::: {.callout-note appearance="simple"}
 ## Por que isso importa no Terra.Ce
-O dashboard e o Terra-AI são aplicações Streamlit. O Streamlit é simples de
+O dashboard é uma aplicação Streamlit. O Streamlit é simples de
 começar e fácil de usar errado: dois bugs graves da versão anterior vinham do
 cache. Num, os dados nunca se atualizavam sem reiniciar o container (B7); no
 outro, uma sessão alterava os dados de todas as outras (B8).

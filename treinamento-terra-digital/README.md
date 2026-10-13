@@ -1,7 +1,7 @@
 # Terra Digital: treinamento da Plataforma Terra.Ce
 
-Material didático web para a equipe da Plataforma Terra.Ce: 17 módulos (do
-domínio fundiário à IA aplicada), exercícios corrigidos no próprio navegador,
+Material didático web para a equipe da Plataforma Terra.Ce: 16 módulos (do
+domínio fundiário à integração contínua), exercícios corrigidos no próprio navegador,
 um projeto integrador e o manual de contribuição para programadores e
 designers.
 
@@ -43,7 +43,7 @@ Actions*.
 | Caminho | Conteúdo |
 |---|---|
 | `index.qmd`, `comece/`, `progresso.qmd` | página inicial, como estudar, cronograma e progresso |
-| `modulos/` | os módulos M0 a M16 |
+| `modulos/` | os módulos M0 a M15 |
 | `manual/` | manual de contribuição: pull request, design, revisão, publicação e edição do material |
 | `projeto-integrador.qmd`, `glossario.qmd`, `referencias.qmd` | fechamento do treinamento |
 | `estilos/` | tema claro, tema escuro e layout comum |

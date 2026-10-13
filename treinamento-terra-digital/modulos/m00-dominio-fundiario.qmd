@@ -272,7 +272,7 @@ opcoes:
   - texto: Situação jurídica do imóvel
     correta: true
   - texto: Andamento do processo de regularização de cada pessoa
-    explicacao: A base é um cadastro, não um sistema de processos. O Terra-AI, por exemplo, orienta a procurar o IDACE nesses casos.
+    explicacao: A base é um cadastro, não um sistema de processos. Para saber o andamento de um processo, a pessoa precisa procurar o IDACE.
   - texto: Número de famílias de cada assentamento
     correta: true
   - texto: Documentos digitalizados dos títulos
@@ -298,7 +298,6 @@ resposta: |
 - [`modules/classificacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/classificacao.py): a única implementação da regra de módulo fiscal.
 - [`modules/paginaConcentracao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaConcentracao.py#L34-L105): o cálculo do Gini por proprietário.
 - [`modules/paginaSobre.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaSobre.py): parceiros, licença e créditos.
-- [`terra_ai/modules/terra_ai_glossario.py`](https://github.com/wwagner33/terra.ce/blob/main/terra_ai/modules/terra_ai_glossario.py): o glossário que o Terra-AI usa para explicar termos.
 - [`README.md` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/README.md): requisitos funcionais e não funcionais.
 
 ## Prática no projeto
@@ -309,7 +308,7 @@ tipo: checklist
 pergunta: Faça na ordem e marque ao concluir.
 itens:
   - Naveguei por todas as páginas em https://terrace.virtual.ufc.br/paineis e escrevi, para cada uma, a pergunta que ela responde.
-  - Montei um glossário com 15 termos do domínio e comparei com o `terra_ai_glossario.py`, anotando o que falta lá.
+  - Montei um glossário com 15 termos do domínio e comparei com o Glossário deste material, anotando o que falta lá.
   - Escolhi um município no Mapa de Concentração, anotei o Gini e expliquei o número em duas frases para alguém de fora da área.
   - Li a seção 1.2 (bugs) do `doc/plano_melhoria_codigo.md` do dashboard e escolhi um bug para explicar em voz alta.
 ~~~

@@ -21,7 +21,6 @@ testes, a segurança, a documentação e o fluxo de contribuição.
 | [CSVs fora da imagem do miniserver](#csvs-fora-da-imagem-do-miniserver) | pequeno | infraestrutura | M13, M14 |
 | [Benchmark corrigido e medido](#benchmark-corrigido-e-medido) | pequeno | dados e painéis | M10, M11 |
 | [Documentação viva](#documentação-viva) | pequeno | todos | M12 |
-| [Avaliação do Terra-AI](#avaliação-do-terra-ai) | médio | IA | M11, M16 |
 
 Outras pendências do
 [plano de melhoria](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md)
@@ -64,7 +63,7 @@ A página Escolas do Campo usa uma lista fixa no código
 Dois itens de `otimizacoes.md` do miniserver.
 
 - **Entrega**: rotas sob `/v1` com `APIRouter`, mantendo as antigas por um
-  período; limite de requisições por cliente; dashboard e Terra-AI migrados;
+  período; limite de requisições por cliente; dashboard migrado;
   nota de versão explicando a transição.
 - **Pronto quando**: os testes cobrem as rotas novas e antigas, e um cliente
   que exceda o limite recebe 429.
@@ -114,15 +113,6 @@ pessoas físicas entram na imagem ([M13](modulos/m13-lgpd.qmd)).
   `/openapi.json`, implementada.
 - **Pronto quando**: nenhum diagrama cita componentes que não existem e o
   contrato da API não pode mais divergir do código.
-
-### Avaliação do Terra-AI
-
-- **Entrega**: um conjunto de pelo menos 30 perguntas com o comportamento
-  esperado e um script que roda todas, confere se cada número da resposta
-  aparece nos resultados das ferramentas e gera um relatório
-  ([M16](modulos/m16-terra-ai.qmd)).
-- **Pronto quando**: o relatório roda com um comando e aponta pelo menos uma
-  melhoria concreta no prompt ou nas ferramentas.
 
 ## Como avaliar
 

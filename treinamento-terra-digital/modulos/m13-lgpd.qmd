@@ -303,10 +303,12 @@ Esconder o nome não esgota o problema. Três riscos merecem atenção:
    continuam nas **camadas da imagem**, ao alcance de quem puder baixá-la.
    Separar a carga num serviço próprio ([M9](m09-engenharia-dados.qmd)) e
    excluir `datasets/` do build resolvem o problema.
-3. **Terceiros.** As perguntas feitas ao Terra-AI e os resultados das
-   ferramentas vão para o provedor do modelo de linguagem
-   ([M16](m16-terra-ai.qmd)). Os nomes já saem protegidos da API, mas a
-   pergunta digitada pela pessoa pode conter dados pessoais.
+3. **Terceiros.** O navegador de quem visita o dashboard baixa os tiles do
+   mapa da CARTO (ou do OpenStreetMap) e algumas imagens de outros sites
+   ([projeto integrador](../projeto-integrador.qmd#imagens-sem-terceiros-e-contraste)).
+   Cada pedido leva o endereço IP da pessoa e, no caso do mapa, a região que
+   ela está olhando. Não são dados do cadastro, mas são dados de quem usa o
+   painel: cada serviço de terceiros novo precisa de justificativa.
 
 ~~~exercicio
 id: m13-camadas-imagem

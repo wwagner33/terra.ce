@@ -2,7 +2,7 @@
 
 Roteiro para formar quem vai desenvolver e manter a plataforma. Ele cobre o
 domínio fundiário e as tecnologias, técnicas e conceitos usados no
-`terraGeoDataMiniServer`, no `dashboard_fundiario_ceara` e no `terra_ai`.
+`terraGeoDataMiniServer` e no `dashboard_fundiario_ceara`.
 
 - **Base:** versão 1.2.0 dos dois submódulos (superprojeto em `9897bd2`), levantada em 12/10/2026.
 - **Público:** bolsistas e desenvolvedores que chegam ao projeto. O plano pressupõe Python básico (funções, classes, módulos) e uso do terminal.
@@ -40,7 +40,6 @@ flowchart LR
     csv -->|importer_all.py| pg[("PostgreSQL + PostGIS")]
     pg -->|"SQLAlchemy + SQL espacial"| tgdm["terraGeoDataMiniServer<br/>FastAPI + Gunicorn"]
     tgdm -->|"JSON e GeoJSON<br/>autenticados por JWT"| dash["dashboard_fundiario_ceara<br/>Streamlit + Folium"]
-    tgdm -->|"JSON + JWT"| ai["Terra-AI (protótipo)<br/>Streamlit + API do Claude"]
     dash --> nav["Navegador<br/>terrace.virtual.ufc.br/paineis"]
     nav -->|"tiles do mapa"| carto["CARTO / OpenStreetMap"]
 ```
@@ -50,7 +49,6 @@ flowchart LR
 | Importadores (`terraGeoDataMiniServer/importer_*.py`) | Coletam a malha fundiária na GeoAPI do IDACE e carregam os CSVs no Postgres, uma transação por tabela | requests, tenacity, pandas, SQLAlchemy, PostGIS |
 | `terraGeoDataMiniServer` | API somente leitura: regiões, municípios, lotes, GeoJSON simplificado, assentamentos, reservatórios e versão dos dados | FastAPI, Pydantic Settings, SQLAlchemy, PyJWT, Gunicorn + Uvicorn |
 | `dashboard_fundiario_ceara` | Painéis públicos: gráficos, predominância, malha fundiária, concentração (Gini), assentamentos, hidrografia e escolas do campo | Streamlit, Folium, GeoPandas, pandas, matplotlib |
-| `terra_ai` | Assistente em linguagem simples que consulta o miniserver por meio de ferramentas | Streamlit, SDK da Anthropic (tool use) |
 | Infraestrutura | Imagens no Docker Hub, stack no Portainer, rede `terra_network`, CI do dashboard no GitHub Actions | Podman/Docker, Compose, Portainer, GitHub Actions |
 
 Uma visita, do começo ao fim: o navegador abre uma página do dashboard; o
@@ -63,7 +61,7 @@ Folium.
 
 | Área | Tecnologias e conceitos | Onde ver |
 |---|---|---|
-| Domínio | malha fundiária, imóvel e lote, módulo fiscal, situação jurídica, assentamento, região administrativa, Índice de Gini | `dashboard_fundiario_ceara/modules/classificacao.py`, `paginaConcentracao.py`, `terra_ai/modules/terra_ai_glossario.py` |
+| Domínio | malha fundiária, imóvel e lote, módulo fiscal, situação jurídica, assentamento, região administrativa, Índice de Gini | `dashboard_fundiario_ceara/modules/classificacao.py`, `paginaConcentracao.py` |
 | Python para dados | pandas 3, numpy, vetorização, `groupby`, `np.select` | `classificacao.py`, `paginaConcentracao.py`, `repositorio.py` |
 | Geoprocessamento | geometrias, WKT/WKB/EWKB, GeoJSON, SRID 4326, 4674 e 31984, simplificação, índice GIST | `importer_all.py`, `data_service/main.py`, `config.py` |
 | Banco de dados | PostgreSQL, PostGIS, SpatiaLite, transações, `ON CONFLICT`, `pg_dump` | `importer_all.py`, `IMPLANTACAO_PORTAINER.md` |
@@ -74,7 +72,6 @@ Folium.
 | Engenharia de dados | ETL, idempotência, retry com backoff, versão das cargas, invalidação de cache | `importer_from_geoapi.py`, `importer_all.py`, `/versao_dados`, `repositorio.py` |
 | Testes e qualidade | pytest, fixtures, `requests-mock`, `TestClient`, `AppTest`, ruff, convenção de nomes, dependências fixadas | `tests/` dos dois projetos, `ruff.toml`, `scripts/` |
 | Implantação | Dockerfile, Podman, Compose, healthcheck, volume e rede externos, Portainer, Docker Hub, GitHub Actions | `Dockerfile.*`, `docker-compose.stack.yml`, `.github/workflows/testes.yml` |
-| IA aplicada | API de mensagens, prompt de sistema, ferramentas, cache de prompt, respostas ancoradas nos dados | `terra_ai/modules/terra_ai_agent.py`, `terra_ai_tools.py` |
 | Documentação | requisitos como user stories, PlantUML, OpenAPI, roteiros de operação | `doc/*.puml`, `terraGeoDataMiniServer/doc/spec.yaml`, READMEs |
 
 ## 3. Trilhas por perfil
@@ -82,25 +79,24 @@ Folium.
 Todos fazem os módulos da coluna **Base**. Depois, cada perfil aprofunda o que
 mais vai usar.
 
-| Módulo | Base | Dados e painéis | Backend e banco | Infraestrutura | IA |
-|---|:-:|:-:|:-:|:-:|:-:|
-| M0 Domínio fundiário | ● | | | | |
-| M1 Ambiente e Git | ● | | | | |
-| M2 Python para dados | ● | | | | |
-| M3 Geoprocessamento | ● | | | | |
-| M4 PostgreSQL e PostGIS | | ○ | ● | ○ | |
-| M5 API com FastAPI | | ○ | ● | ○ | ○ |
-| M6 Segurança | ● | | | | |
-| M7 Streamlit | | ● | ○ | | ● |
-| M8 Mapas e gráficos | | ● | | | |
-| M9 Engenharia de dados | | ○ | ● | ○ | |
-| M10 Desempenho e cache | | ● | ● | ○ | |
-| M11 Testes | ● | | | | |
-| M12 Qualidade e documentação | ● | | | | |
-| M13 LGPD | ● | | | | |
-| M14 Containers e implantação | | ○ | ○ | ● | |
-| M15 Integração contínua | | | ○ | ● | |
-| M16 Terra-AI | | | | | ● |
+| Módulo | Base | Dados e painéis | Backend e banco | Infraestrutura |
+|---|:-:|:-:|:-:|:-:|
+| M0 Domínio fundiário | ● | | | |
+| M1 Ambiente e Git | ● | | | |
+| M2 Python para dados | ● | | | |
+| M3 Geoprocessamento | ● | | | |
+| M4 PostgreSQL e PostGIS | | ○ | ● | ○ |
+| M5 API com FastAPI | | ○ | ● | ○ |
+| M6 Segurança | ● | | | |
+| M7 Streamlit | | ● | ○ | |
+| M8 Mapas e gráficos | | ● | | |
+| M9 Engenharia de dados | | ○ | ● | ○ |
+| M10 Desempenho e cache | | ● | ● | ○ |
+| M11 Testes | ● | | | |
+| M12 Qualidade e documentação | ● | | | |
+| M13 LGPD | ● | | | |
+| M14 Containers e implantação | | ○ | ○ | ● |
+| M15 Integração contínua | | | ○ | ● |
 
 ● obrigatório · ○ recomendado
 
@@ -117,7 +113,7 @@ mais vai usar.
 | 7 | M9, M13 | Relatório da carga repetida duas vezes e análise da regra de privacidade |
 | 8 | M10, M11 | Medições de cache e compressão; testes novos |
 | 9 | M12, M14 | Stack completa em containers locais; um diagrama atualizado |
-| 10 | M15, M16 | Workflow de CI do miniserver; avaliação do Terra-AI (perfil IA) |
+| 10 | M15 | Workflow de CI do miniserver, com lint e testes |
 | 11 e 12 | Projeto integrador | Pull request revisado e apresentação de 15 minutos |
 
 ## 5. Módulos
@@ -137,12 +133,12 @@ mais vai usar.
 - Requisitos do dashboard (RF01 a RF04, RNF01 a RNF03) e o histórico de decisões em `dashboard_fundiario_ceara/doc/plano_melhoria_codigo.md`.
 
 **No Terra.Ce.** `dashboard_fundiario_ceara/README.md`, `modules/paginaSobre.py`,
-`modules/classificacao.py`, `terra_ai/modules/terra_ai_glossario.py`,
+`modules/classificacao.py`,
 `dashboard_fundiario_ceara/doc/diagrama_casos_de_uso.puml`.
 
 **Prática.**
 1. Navegue por todas as páginas em <https://terrace.virtual.ufc.br/paineis> e escreva, para cada uma, a pergunta que ela responde.
-2. Monte um glossário com 15 termos. Compare com `terra_ai_glossario.py` e aponte o que falta lá.
+2. Monte um glossário com 15 termos. Compare com o glossário do material didático e aponte o que falta lá.
 3. Num município com módulo fiscal de 55 ha, classifique à mão imóveis de 30, 200, 500 e 1.000 ha. Confira com `classificarPorModuloFiscal`.
 
 **Referências.**
@@ -334,7 +330,7 @@ mais vai usar.
    imóveis, área total e área média, e escreva o teste usando as fixtures de
    `tests/conftest.py`.
 4. Planeje a passagem das rotas para o prefixo `/v1` com `APIRouter`, item de
-   `otimizacoes.md`, sem quebrar o dashboard nem o Terra-AI.
+   `otimizacoes.md`, sem quebrar o dashboard.
 
 **Referências.**
 - Tutorial do FastAPI: <https://fastapi.tiangolo.com/pt/tutorial/>
@@ -610,7 +606,7 @@ mais vai usar.
   `PSEUDONIMIZACAO_SECRET` ou, se vazia, derivada do `JWT_SECRET`. Por que é
   estável e o que acontece com ele numa rotação de segredo.
 - Risco residual: reidentificação por combinação de campos (número do INCRA, número do título, área e município).
-- Dados enviados a terceiros: as perguntas e respostas do Terra-AI passam por um provedor externo.
+- Dados enviados a terceiros: o navegador de quem visita o dashboard baixa os tiles do mapa e algumas imagens de outros sites, revelando o IP e a região consultada.
 
 **No Terra.Ce.** `privacidade.py` nos dois projetos, `test_privacidade.py` nos
 dois, `test_lgpd_endpoints.py` no miniserver, seção "Dados pessoais (LGPD)" do
@@ -696,35 +692,6 @@ README do dashboard.
 - GitHub Actions: <https://docs.github.com/actions>
 - Webhooks do Portainer: <https://docs.portainer.io>
 
-### M16 — IA aplicada: o Terra-AI (opcional)
-
-**Objetivo.** Entender como um modelo de linguagem responde perguntas sobre os dados sem inventar números.
-
-**Conteúdo.**
-- API de mensagens: papéis, histórico, `max_tokens`, `stop_reason`.
-- Prompt de sistema com público, tom e limites (sem orientação jurídica, encaminhamento ao IDACE).
-- Uso de ferramentas: esquema JSON de cada ferramenta, laço `tool_use` →
-  `tool_result`, limite de iterações.
-- Respostas ancoradas nos dados: o modelo só afirma números vindos das
-  ferramentas; erros voltam com sugestões; nomes de município resolvidos por
-  aproximação com `difflib`.
-- Cache de prompt (`cache_control`), parâmetro de esforço, custo, latência e recusas.
-- Avaliação: perguntas com resposta conhecida e verificação de números inventados.
-- Privacidade: o Terra-AI consome dados já protegidos pelo miniserver, mas a conversa vai para o provedor.
-
-**No Terra.Ce.** `terra_ai/modules/terra_ai_agent.py`, `terra_ai_tools.py`,
-`terra_api_client.py`, `terra_ai_glossario.py`, `terra_ai/.env.example`.
-
-**Prática.**
-1. Rode o Terra-AI localmente contra o miniserver do M5, com uma chave de API do projeto e limite de gasto combinado com a coordenação.
-2. Monte 20 perguntas de avaliação com resposta esperada, inclusive perguntas
-   fora do escopo (andamento de processo) e pedidos de orientação jurídica.
-   Rode e registre os acertos.
-3. Acrescente uma ferramenta `gini_municipio` e verifique se o modelo passa a usá-la nas perguntas certas.
-
-**Referências.**
-- Documentação da API do Claude (uso de ferramentas, cache de prompt): <https://docs.claude.com>
-
 ## 6. Projeto integrador
 
 Nas duas últimas semanas, cada pessoa (ou dupla, nos itens maiores) resolve uma
@@ -735,11 +702,10 @@ pendência real da plataforma.
 | Carregador de Dados (dupla) | Serviço próprio para `importer_from_geoapi.py` e `importer_all.py`, com agendamento mensal e registro em `carga_dados`; miniserver com `IMPORTAR_DADOS_NA_INICIALIZACAO=false` | M4, M9, M14 |
 | Escolas do campo no banco | O CSV `datasets/escolas_do_campo.csv` já existe, mas a página usa uma lista fixa no código. Importar, expor um endpoint e consumir no dashboard | M4, M5, M7, M9 |
 | CI do miniserver | Workflow de lint e testes e um teste de integração com PostGIS real | M11, M15 |
-| Rotas `/v1` e limite de requisições | Itens de `otimizacoes.md`, com dashboard e Terra-AI migrados | M5, M6, M7 |
+| Rotas `/v1` e limite de requisições | Itens de `otimizacoes.md`, com o dashboard migrado | M5, M6, M7 |
 | Imagens sem terceiros | Servir localmente as imagens hoje carregadas de `i.imgur.com` e `idace.ce.gov.br` (achado S8) | M6, M7 |
 | Lorenz por município | Página com curva de Lorenz e Gini por município, explicada para leigos | M2, M7, M8 |
 | Documentação viva | Diagramas PlantUML da 1.2.0 e contrato OpenAPI gerado a partir do código | M12 |
-| Avaliação do Terra-AI | Conjunto de perguntas rodado automaticamente, com relatório de acertos | M11, M16 |
 
 **Critérios de conclusão.**
 - Pull request com o problema, a solução e como testar.

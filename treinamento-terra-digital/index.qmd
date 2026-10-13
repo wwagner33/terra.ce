@@ -23,7 +23,7 @@ Como os módulos funcionam, os tipos de exercício e as regras de segurança.
 :::
 ::: {.cartao}
 #### Módulos
-Dezessete módulos, do domínio fundiário à IA aplicada, em 12 semanas.
+Dezesseis módulos, do domínio fundiário à integração contínua, em 12 semanas.
 [Cronograma e trilhas →](comece/cronograma.qmd)
 :::
 ::: {.cartao}
@@ -47,7 +47,6 @@ flowchart LR
     csv --> pg[("PostGIS")]
     pg --> tgdm["miniserver<br/>FastAPI"]
     tgdm -->|"JSON + JWT"| dash["dashboard<br/>Streamlit"]
-    tgdm -->|"JSON + JWT"| ai["Terra-AI"]
     dash --> nav["navegador"]
 ```
 
@@ -57,7 +56,6 @@ flowchart LR
 | Banco de dados | Guarda imóveis, municípios, assentamentos e reservatórios com geometria | PostgreSQL, PostGIS | [M3](modulos/m03-geoprocessamento.qmd), [M4](modulos/m04-postgis.qmd) |
 | `terraGeoDataMiniServer` | API somente leitura com dados e GeoJSON, protegida por JWT | FastAPI, Pydantic, Gunicorn | [M5](modulos/m05-fastapi.qmd), [M6](modulos/m06-seguranca.qmd) |
 | `dashboard_fundiario_ceara` | Painéis com gráficos, mapas e o Índice de Gini | Streamlit, Folium, pandas, GeoPandas | [M7](modulos/m07-streamlit.qmd), [M8](modulos/m08-mapas-graficos.qmd) |
-| `terra_ai` | Assistente que responde em linguagem simples, consultando a API | API do Claude, uso de ferramentas | [M16](modulos/m16-terra-ai.qmd) |
 | Infraestrutura | Imagens no Docker Hub, stack no Portainer, testes no GitHub Actions | Podman/Docker, Compose, GitHub Actions | [M14](modulos/m14-containers.qmd), [M15](modulos/m15-integracao-continua.qmd) |
 
 ## Os módulos
@@ -87,9 +85,6 @@ flowchart LR
 [M13 · LGPD](modulos/m13-lgpd.qmd) ·
 [M14 · Containers e implantação](modulos/m14-containers.qmd) ·
 [M15 · Integração contínua](modulos/m15-integracao-continua.qmd)
-
-**IA aplicada.**
-[M16 · O Terra-AI](modulos/m16-terra-ai.qmd)
 
 No fim, o [projeto integrador](projeto-integrador.qmd) resolve uma pendência
 real da plataforma, entregue por pull request.

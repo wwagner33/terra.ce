@@ -221,7 +221,7 @@ pares:
     definicao: "1.3.0"
   - termo: Mover todas as rotas para o prefixo `/v1`, removendo as antigas
     definicao: "2.0.0"
-explicacao: Mover as rotas sem manter as antigas quebra o dashboard e o Terra-AI. Mantendo as duas por um tempo, a mudança seria MENOR.
+explicacao: Mover as rotas sem manter as antigas quebra o dashboard. Mantendo as duas por um tempo, a mudança seria MENOR.
 ~~~
 
 ## 6. Commits e revisões
@@ -289,8 +289,8 @@ dica: Compare letra por letra com o valor da stack, `reservatorios_ceara`.
 explicacao: |
   O padrão do `config.py` é `reseratorios_ceara`, com um "v" a menos. Em
   produção não faz diferença, porque a stack define o nome certo. Mas quem
-  rodar o miniserver só com o `config.py` cria a tabela com o nome errado, e o
-  Terra-AI ou um script que use o nome certo não a encontra. Um bom primeiro
+  rodar o miniserver só com o `config.py` cria a tabela com o nome errado, e um
+  script ou consulta que use o nome certo não a encontra. Um bom primeiro
   pull request.
 ~~~
 

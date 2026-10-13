@@ -19,7 +19,7 @@ revisada por alguém da equipe.
 | 7 | [M9](../modulos/m09-engenharia-dados.qmd), [M13](../modulos/m13-lgpd.qmd) | Relatório da carga repetida duas vezes e análise da regra de privacidade |
 | 8 | [M10](../modulos/m10-desempenho-cache.qmd), [M11](../modulos/m11-testes.qmd) | Medições de cache e compressão; testes novos |
 | 9 | [M12](../modulos/m12-qualidade-documentacao.qmd), [M14](../modulos/m14-containers.qmd) | Stack completa em containers locais; um diagrama atualizado |
-| 10 | [M15](../modulos/m15-integracao-continua.qmd), [M16](../modulos/m16-terra-ai.qmd) | Workflow de CI do miniserver; avaliação do Terra-AI (perfil IA) |
+| 10 | [M15](../modulos/m15-integracao-continua.qmd) | Workflow de CI do miniserver, com lint e testes |
 | 11 e 12 | [Projeto integrador](../projeto-integrador.qmd) | Pull request revisado e apresentação de 15 minutos |
 
 ## Trilhas por perfil
@@ -27,25 +27,24 @@ revisada por alguém da equipe.
 Todos fazem os módulos da coluna **Base**. Depois, cada perfil aprofunda o que
 mais vai usar. Quem já domina um tema pode fazer só os exercícios e a prática.
 
-| Módulo | Base | Dados e painéis | Backend e banco | Infraestrutura | IA | Design |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| M0 Domínio fundiário | ● | | | | | |
-| M1 Ambiente e Git | ● | | | | | |
-| M2 Python para dados | ● | | | | | |
-| M3 Geoprocessamento | ● | | | | | |
-| M4 PostgreSQL e PostGIS | | ○ | ● | ○ | | |
-| M5 API com FastAPI | | ○ | ● | ○ | ○ | |
-| M6 Segurança | ● | | | | | |
-| M7 Streamlit | | ● | ○ | | ● | ● |
-| M8 Mapas e gráficos | | ● | | | | ● |
-| M9 Engenharia de dados | | ○ | ● | ○ | | |
-| M10 Desempenho e cache | | ● | ● | ○ | | |
-| M11 Testes | ● | | | | | |
-| M12 Qualidade e documentação | ● | | | | | |
-| M13 LGPD | ● | | | | | |
-| M14 Containers e implantação | | ○ | ○ | ● | | |
-| M15 Integração contínua | | | ○ | ● | | |
-| M16 Terra-AI | | | | | ● | |
+| Módulo | Base | Dados e painéis | Backend e banco | Infraestrutura | Design |
+|---|:-:|:-:|:-:|:-:|:-:|
+| M0 Domínio fundiário | ● | | | | |
+| M1 Ambiente e Git | ● | | | | |
+| M2 Python para dados | ● | | | | |
+| M3 Geoprocessamento | ● | | | | |
+| M4 PostgreSQL e PostGIS | | ○ | ● | ○ | |
+| M5 API com FastAPI | | ○ | ● | ○ | |
+| M6 Segurança | ● | | | | |
+| M7 Streamlit | | ● | ○ | | ● |
+| M8 Mapas e gráficos | | ● | | | ● |
+| M9 Engenharia de dados | | ○ | ● | ○ | |
+| M10 Desempenho e cache | | ● | ● | ○ | |
+| M11 Testes | ● | | | | |
+| M12 Qualidade e documentação | ● | | | | |
+| M13 LGPD | ● | | | | |
+| M14 Containers e implantação | | ○ | ○ | ● | |
+| M15 Integração contínua | | | ○ | ● | |
 
 ● obrigatório · ○ recomendado
 

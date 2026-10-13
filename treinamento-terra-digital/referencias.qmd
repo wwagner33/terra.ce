@@ -25,7 +25,6 @@ treinamento inteiro.
 - [Curso]{.selo} [Introduction to PostGIS](https://postgis.net/workshops/postgis-intro/). Workshop oficial do PostGIS, inglês.
 - [Curso]{.selo} [Pandas](https://www.kaggle.com/learn/pandas). Kaggle Learn, exercícios no navegador, inglês.
 - [Curso]{.selo} [Learn Git Branching](https://learngitbranching.js.org/?locale=pt_BR). Interativo, português.
-- [Curso]{.selo} [Anthropic Academy](https://academy.claude.com/). Cursos sobre a API e o uso de IA, inglês.
 :::
 
 ## Documentação essencial
