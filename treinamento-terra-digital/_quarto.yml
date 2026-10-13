@@ -1,0 +1,114 @@
+project:
+  type: website
+  output-dir: _site
+  # Gera o índice usado pela página "Meu progresso". Só usa a biblioteca padrão do Python.
+  pre-render: ferramentas/exercicios.py
+  render:
+    - "*.qmd"
+    - "comece/*.qmd"
+    - "modulos/*.qmd"
+    - "manual/*.qmd"
+  resources:
+    - indiceExercicios.js
+    - imagens/
+
+lang: pt-BR
+
+website:
+  title: "Terra Digital"
+  description: "Treinamento da equipe da Plataforma Terra.Ce: domínio fundiário, geoprocessamento, APIs, painéis, dados, segurança, LGPD e implantação."
+  favicon: imagens/icone.svg
+  repo-url: https://github.com/wwagner33/terra.ce
+  repo-subdir: treinamento-terra-digital
+  repo-branch: main
+  repo-actions: [edit, source, issue]
+  page-navigation: true
+  back-to-top-navigation: true
+  search:
+    location: navbar
+    type: overlay
+  navbar:
+    left:
+      - text: "Início"
+        href: index.qmd
+      - text: "Módulos"
+        href: modulos/m00-dominio-fundiario.qmd
+      - text: "Manual de contribuição"
+        href: manual/index.qmd
+      - text: "Meu progresso"
+        href: progresso.qmd
+    tools:
+      - icon: github
+        href: https://github.com/wwagner33/terra.ce/tree/main/treinamento-terra-digital
+        aria-label: "Código do treinamento no GitHub"
+  sidebar:
+    style: docked
+    contents:
+      - href: index.qmd
+        text: "Início"
+      - section: "Comece aqui"
+        contents:
+          - comece/como-estudar.qmd
+          - comece/cronograma.qmd
+          - progresso.qmd
+          - glossario.qmd
+      - section: "Fundamentos"
+        contents:
+          - modulos/m00-dominio-fundiario.qmd
+          - modulos/m01-ambiente-git.qmd
+          - modulos/m02-python-dados.qmd
+          - modulos/m03-geoprocessamento.qmd
+      - section: "Backend e banco de dados"
+        contents:
+          - modulos/m04-postgis.qmd
+          - modulos/m05-fastapi.qmd
+          - modulos/m06-seguranca.qmd
+      - section: "Painéis e mapas"
+        contents:
+          - modulos/m07-streamlit.qmd
+          - modulos/m08-mapas-graficos.qmd
+      - section: "Dados, desempenho e qualidade"
+        contents:
+          - modulos/m09-engenharia-dados.qmd
+          - modulos/m10-desempenho-cache.qmd
+          - modulos/m11-testes.qmd
+          - modulos/m12-qualidade-documentacao.qmd
+      - section: "Privacidade e operação"
+        contents:
+          - modulos/m13-lgpd.qmd
+          - modulos/m14-containers.qmd
+          - modulos/m15-integracao-continua.qmd
+      - projeto-integrador.qmd
+      - section: "Manual de contribuição"
+        contents:
+          - manual/index.qmd
+          - manual/fluxo-pull-request.qmd
+          - manual/designers.qmd
+          - manual/revisao.qmd
+          - manual/publicacao.qmd
+          - manual/material-didatico.qmd
+      - referencias.qmd
+  page-footer:
+    left: "Terra Digital · Projeto Cientista Chefe Terra (IDACE, UFC e Funcap)"
+    center: "Conteúdo sob a licença [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/deed.pt-br)"
+    right: "Feito com [Quarto](https://quarto.org)"
+
+format:
+  html:
+    theme:
+      light: [cosmo, estilos/terra.scss]
+      dark: [darkly, estilos/terra-escuro.scss]
+    css: estilos/comum.css
+    toc: true
+    toc-title: "Nesta página"
+    toc-depth: 3
+    code-copy: true
+    code-overflow: wrap
+    link-external-newwindow: true
+    smooth-scroll: true
+    anchor-sections: true
+    mermaid:
+      theme: neutral
+
+filters:
+  - exercicios

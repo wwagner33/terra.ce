@@ -1,0 +1,21 @@
+---
+title: "Meu progresso"
+subtitle: "O que você já concluiu, módulo a módulo"
+toc: false
+---
+
+O progresso fica guardado só neste navegador. Para continuar em outro
+computador, baixe o arquivo abaixo e carregue-o lá. Para mostrar seu andamento
+a quem acompanha o treinamento, envie o mesmo arquivo.
+
+```{=html}
+<script src="indiceExercicios.js"></script>
+<div id="painel-progresso"><p>Carregando…</p></div>
+```
+
+::: {.callout-note}
+## O que conta como concluído
+Exercícios autocorrigidos contam quando você acerta. Respostas abertas contam
+quando você marca que sua resposta cobre os pontos da resposta comentada. Práticas
+guiadas contam quando todos os passos estão marcados.
+:::

@@ -1,0 +1,338 @@
+---
+title: "M10 · Desempenho e cache"
+subtitle: "Onde se gastam tempo e bytes, e as camadas de cache da plataforma"
+---
+
+::: {.ficha-modulo}
+**Duração:** 6 a 8 horas · **Obrigatório para:** dados e painéis, backend e banco · **Recomendado para:** infraestrutura · **Pré-requisitos:** [M5](m05-fastapi.qmd), [M7](m07-streamlit.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+O cadastro tem dezenas de milhares de imóveis, e o dashboard é público: várias
+pessoas consultam ao mesmo tempo, muitas pelo celular. O requisito RNF02 pede
+que gráficos e mapas carreguem rápido. A plataforma atinge isso com cache em
+quatro lugares diferentes, e cache mal invalidado é a origem de alguns dos
+bugs mais difíceis do projeto.
+:::
+
+> Há só duas coisas difíceis em Ciência da Computação: invalidação de cache e dar nomes às coisas.
+> — atribuída a Phil Karlton
+
+## Objetivos
+
+- Medir antes de otimizar.
+- Mapear as camadas de cache da plataforma, com prazo e forma de invalidação de cada uma.
+- Calcular quanto tempo um dado novo leva para aparecer.
+- Reduzir o tamanho das respostas.
+- Entender os limites de concorrência do miniserver e do banco.
+
+## 1. Medir antes de otimizar
+
+O tempo de uma página se divide em partes muito diferentes: a consulta no
+banco, a serialização do JSON, a transferência pela rede, a montagem do
+DataFrame, a geração do HTML do mapa e o desenho no navegador. Otimizar a parte
+errada não muda nada para quem usa.
+
+Ferramentas à mão:
+
+- `curl -w "%{time_total} s, %{size_download} bytes\n" -o /dev/null -s URL`:
+  tempo e tamanho de uma resposta da API;
+- a aba **Rede** (*Network*) das ferramentas do navegador: o que a página baixa e quanto demora;
+- `EXPLAIN ANALYZE` no banco ([M4](m04-postgis.qmd));
+- [`tests/benchPaginas.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/benchPaginas.py)
+  no dashboard, que mede cada página com dados sintéticos em volume realista:
+  tempo com cache frio, tempo com cache quente, número de requisições e
+  tamanho do HTML do mapa.
+
+::: {.callout-warning}
+## O benchmark precisa de manutenção
+O `benchPaginas.py` ainda usa a chave de sessão `current_page` e os títulos
+antigos das páginas, enquanto a navegação atual usa `paginaAtual` e chaves
+como `graficos` e `malhaFundiaria` ([`navegacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/navegacao.py)).
+Sem ajuste, ele tende a medir sempre a página inicial. Corrigir isso é a
+primeira prática deste módulo.
+:::
+
+## 2. As camadas de cache
+
+| Onde | O que guarda | Prazo | Como é invalidado |
+|---|---|---|---|
+| Miniserver, `lru_cache` | listas de regiões e municípios | 10 min (`CACHE_LISTAS_SEGUNDOS`) | a "janela" de tempo muda e a chave fica nova |
+| Dashboard, `st.cache_data` e `st.cache_resource` | respostas da API e DataFrames | 24 h (`TTL_DADOS`) | TTL, ou `.clear()` quando a versão dos dados muda |
+| Dashboard, versão dos dados | resposta de `/versao_dados` | 5 min (`TTL_VERSAO`) | TTL |
+| Dashboard, `apiCliente` | token JWT e conexão HTTP | até 2 min antes de vencer | 401, ou proximidade do vencimento |
+| Navegador | tiles do mapa de fundo | definido pela CARTO | cabeçalhos HTTP do servidor de tiles |
+
+~~~exercicio
+id: m10-camadas
+tipo: associar
+pergunta: Associe cada cache ao mecanismo que faz ele "esquecer".
+pares:
+  - termo: "`lru_cache` das regiões no miniserver"
+    definicao: O número da janela de tempo muda a cada 10 minutos
+  - termo: "`carregarLotes` no dashboard"
+    definicao: É limpo quando /versao_dados anuncia uma carga nova
+  - termo: Token JWT do `apiCliente`
+    definicao: É descartado ao receber 401 ou perto de vencer
+  - termo: "`carregarVersaoDados`"
+    definicao: Expira pelo TTL de 5 minutos
+explicacao: Cada camada tem o seu prazo. Somados, eles determinam quanto tempo um dado novo leva para aparecer.
+~~~
+
+## 3. Cache com janela de tempo no miniserver
+
+O `functools.lru_cache` não tem prazo de validade: guarda o resultado para
+sempre, enquanto o processo viver. O miniserver contorna isso acrescentando
+um argumento que muda com o tempo
+([`main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L118-L142)):
+
+```python
+def _janela_cache() -> int:
+    """Número da janela de tempo atual. Muda a cada CACHE_LISTAS_SEGUNDOS."""
+    return int(time.time() // max(settings.CACHE_LISTAS_SEGUNDOS, 1))
+
+def fetch_regioes() -> List[str]:
+    return _fetch_regioes(_janela_cache())
+
+@lru_cache(maxsize=4)
+def _fetch_regioes(janela: int) -> List[str]:
+    ...  # consulta o banco
+```
+
+Enquanto a janela é a mesma, a chamada encontra o resultado no cache. Quando
+o relógio cruza o limite da janela, a chave muda e a consulta roda de novo. O
+`maxsize=4` faz as janelas antigas saírem do cache.
+
+~~~exercicio
+id: m10-janela
+tipo: python
+pergunta: |
+  Escreva `janelaCache(agora, segundos)` como no miniserver, e
+  `mesmaJanela(t1, t2, segundos)`, que diz se dois instantes caem na mesma
+  janela (e portanto usariam o mesmo resultado do cache).
+inicial: |
+  def janelaCache(agora, segundos):
+      return 0
+
+  def mesmaJanela(t1, t2, segundos):
+      return True
+
+  print(janelaCache(1_790_000_123, 600))
+solucao: |
+  def janelaCache(agora, segundos):
+      return int(agora // max(segundos, 1))
+
+  def mesmaJanela(t1, t2, segundos):
+      return janelaCache(t1, segundos) == janelaCache(t2, segundos)
+
+  print(janelaCache(1_790_000_123, 600))
+testes:
+  - nome: calcula o número da janela
+    codigo: |
+      assert janelaCache(1_790_000_123, 600) == 2_983_333, janelaCache(1_790_000_123, 600)
+  - nome: instantes próximos podem cair em janelas diferentes
+    codigo: |
+      assert not mesmaJanela(599, 601, 600), "599 s e 601 s estão em janelas diferentes"
+  - nome: instantes distantes podem cair na mesma janela
+    codigo: |
+      assert mesmaJanela(600, 1199, 600), "600 s e 1199 s estão na mesma janela"
+  - nome: segundos igual a zero não divide por zero
+    codigo: |
+      assert janelaCache(10, 0) == 10
+explicacao: |
+  Repare que o prazo real varia entre zero e 10 minutos, conforme o momento em
+  que o dado entrou no cache dentro da janela. E cada um dos quatro workers do
+  Gunicorn tem o seu próprio `lru_cache`, porque são processos separados.
+~~~
+
+## 4. Invalidação pela versão dos dados
+
+Os dados do miniserver mudam uma vez por mês, mas um TTL de 24 horas
+significaria até um dia de dados velhos. A solução da versão 1.2.0: o
+dashboard pergunta ao miniserver, a cada 5 minutos, qual é a versão da carga
+(`/versao_dados`), e limpa os caches quando ela muda
+([`repositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py#L48-L81)):
+
+```python
+def sincronizarVersaoDados() -> None:
+    global _versaoConhecida
+    versao = carregarVersaoDados()          # cache de 5 minutos
+    if not versao:
+        return
+    if _versaoConhecida and versao != _versaoConhecida:
+        for funcao in _CACHES_DE_DADOS:
+            funcao.clear()
+    _versaoConhecida = versao
+```
+
+Cada função de carga é decorada com `@_conferindoVersao`, que chama
+`sincronizarVersaoDados()` antes de usar o cache. As funções derivadas, como
+`_classificarLotes`, recebem a versão como argumento, para nunca misturar
+dados de cargas diferentes.
+
+~~~exercicio
+id: m10-pior-caso
+tipo: numero
+pergunta: |
+  Uma carga termina no miniserver. Ignorando o cache de listas do miniserver,
+  em quantos **minutos**, no pior caso, o dashboard passa a mostrar os dados
+  novos para quem interage com ele?
+resposta: 5
+unidade: min
+explicacao: |
+  É o `TTL_VERSAO`. No pior caso, o dashboard acabou de consultar a versão um
+  instante antes da carga terminar, e só pergunta de novo 5 minutos depois. As
+  listas de regiões e municípios ainda podem levar até 10 minutos no
+  miniserver.
+~~~
+
+## 5. Menos bytes
+
+A forma mais barata de acelerar uma resposta é mandar menos dados:
+
+- **Compressão**: o miniserver comprime as respostas com Brotli ou gzip,
+  conforme o que o cliente aceita (`Accept-Encoding`). JSON e GeoJSON são texto
+  repetitivo e encolhem muito.
+- **Precisão**: 6 casas decimais em graus são cerca de 10 cm; mais do que isso
+  é ruído que ocupa bytes.
+- **Simplificação** das geometrias no servidor ([M3](m03-geoprocessamento.qmd)).
+- **Só o necessário**: `/dados_fundiarios` não traz geometria, porque os
+  gráficos e o Gini não precisam dela.
+
+~~~exercicio
+id: m10-arredondar
+tipo: python
+pergunta: |
+  Escreva `arredondarCoordenadas(geometria, casas)` para um GeoJSON de
+  geometria (dicionário com `type` e `coordinates`), arredondando todos os
+  números, em qualquer nível de aninhamento. Depois compare o tamanho
+  comprimido com `gzip`.
+inicial: |
+  import gzip, json, math
+
+  def arredondarCoordenadas(geometria, casas):
+      return geometria
+
+  pontos = [[-39 + 0.01 * math.cos(k / 50), -5 + 0.01 * math.sin(k / 50)] for k in range(315)]
+  poligono = {"type": "Polygon", "coordinates": [pontos + [pontos[0]]]}
+
+  def tamanhoComprimido(objeto):
+      return len(gzip.compress(json.dumps(objeto).encode()))
+
+  print(tamanhoComprimido(poligono), tamanhoComprimido(arredondarCoordenadas(poligono, 6)))
+solucao: |
+  import gzip, json, math
+
+  def arredondarCoordenadas(geometria, casas):
+      def arredondar(valor):
+          if isinstance(valor, list):
+              return [arredondar(item) for item in valor]
+          if isinstance(valor, float):
+              return round(valor, casas)
+          return valor
+      return {**geometria, "coordinates": arredondar(geometria["coordinates"])}
+
+  pontos = [[-39 + 0.01 * math.cos(k / 50), -5 + 0.01 * math.sin(k / 50)] for k in range(315)]
+  poligono = {"type": "Polygon", "coordinates": [pontos + [pontos[0]]]}
+
+  def tamanhoComprimido(objeto):
+      return len(gzip.compress(json.dumps(objeto).encode()))
+
+  print(tamanhoComprimido(poligono), tamanhoComprimido(arredondarCoordenadas(poligono, 6)))
+testes:
+  - nome: arredonda os números do polígono
+    codigo: |
+      r = arredondarCoordenadas(poligono, 6)
+      x, y = r["coordinates"][0][1]
+      assert x == round(x, 6) and y == round(y, 6) and len(str(x).split(".")[1]) <= 6, (x, y)
+  - nome: mantém o tipo e a estrutura
+    codigo: |
+      r = arredondarCoordenadas(poligono, 6)
+      assert r["type"] == "Polygon" and len(r["coordinates"][0]) == len(poligono["coordinates"][0])
+  - nome: não altera o original
+    codigo: |
+      arredondarCoordenadas(poligono, 2)
+      assert len(str(poligono["coordinates"][0][1][0])) > 10, "a função alterou o polígono original"
+  - nome: o resultado comprimido fica bem menor
+    codigo: |
+      antes, depois = tamanhoComprimido(poligono), tamanhoComprimido(arredondarCoordenadas(poligono, 6))
+      assert depois < 0.75 * antes, (antes, depois)
+explicacao: |
+  É o que `ST_AsGeoJSON(geom, 6)` faz no banco. Com coordenadas arredondadas,
+  há menos dígitos e mais repetição, e o gzip comprime melhor.
+~~~
+
+## 6. Concorrência e conexões
+
+O miniserver roda com 4 workers, cada um com 8 threads: até 32 requisições
+ao mesmo tempo. Os endpoints são funções `def` comuns, que o FastAPI executa
+num grupo de threads.
+
+Cada worker tem o seu `engine` do SQLAlchemy, e cada `engine` mantém um
+**pool de conexões** com o banco. O padrão do SQLAlchemy é 5 conexões fixas
+mais até 10 extras por `engine`.
+
+~~~exercicio
+id: m10-conexoes
+tipo: numero
+pergunta: Com 4 workers e o pool padrão do SQLAlchemy (5 fixas + 10 extras por engine), quantas conexões o miniserver pode abrir no máximo com o PostgreSQL?
+resposta: 60
+explicacao: |
+  4 × (5 + 10) = 60. O PostgreSQL vem configurado com 100 conexões no máximo.
+  Aumentar os workers sem olhar essa conta pode esgotar o banco, e o
+  Carregador de Dados também vai precisar de conexões.
+~~~
+
+~~~exercicio
+id: m10-plano
+tipo: aberta
+pergunta: |
+  Alguém reclama que a página "Mapa da Malha Fundiária" demora 20 segundos
+  para abrir com a região do Cariri. Escreva um plano de investigação: o que
+  medir, em que ordem e com que ferramenta.
+resposta: |
+  - Separar as partes: medir o `/geojson?regiao=Cariri` com `curl -w`
+    (tempo e bytes) direto no miniserver. Se a API for rápida, o problema
+    está no dashboard ou no navegador.
+  - No banco: `EXPLAIN ANALYZE` da consulta do endpoint, conferindo o uso de
+    índice no filtro por região.
+  - No dashboard: tempo de montagem do mapa e tamanho do HTML do Folium
+    (`benchPaginas.py` ou `mapa.get_root().render()`).
+  - No navegador: aba Rede e aba Desempenho, para ver download e desenho.
+  - Só depois escolher a ação: tolerância maior para regiões, recorte por
+    município, cache, ou outra forma de desenho (tiles vetoriais).
+~~~
+
+## No código
+
+- [`data_service/main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L80-L142): compressão, `lru_cache` e janela de tempo.
+- [`modules/repositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py): caches e versão dos dados.
+- [`modules/apiCliente.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/apiCliente.py): sessão HTTP por thread e reuso do token.
+- [`modules/config.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/config.py): `TTL_DADOS` e `TTL_VERSAO`.
+- [`otimizacoes.md`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/otimizacoes.md): a lista de otimizações do miniserver.
+
+## Prática no projeto
+
+~~~exercicio
+id: m10-pratica
+tipo: checklist
+pergunta: Nos dois projetos, numa branch de estudo.
+itens:
+  - "Corrigi o `tests/benchPaginas.py` para usar `navegacao.CHAVE_SESSAO` e as chaves de `navegacao.PAGINAS`, e rodei `python -m tests.benchPaginas`."
+  - Identifiquei a página mais lenta com cache frio e com cache quente.
+  - "Medi o tamanho de `/geojson?regiao=...` com `Accept-Encoding` vazio, `gzip` e `br`, e com duas tolerâncias diferentes."
+  - "Mostrei, com logs, que a lista de regiões no miniserver só consulta o banco uma vez por janela de 10 minutos em cada worker."
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Cache, Dicionário do Programador](https://www.youtube.com/watch?v=I8iGQjKGjDA). Código Fonte TV, 12 min, português.
+- [Vídeo]{.selo} [Cache explicado: o que é e como funciona](https://www.youtube.com/watch?v=r-tiD2MYnWE). Augusto Galego, 19 min, português.
+- [Vídeo]{.selo} [gzip file compression in 100 seconds](https://www.youtube.com/watch?v=NLtt4S9ErIA). Fireship, 2 min, inglês.
+- [Leitura]{.selo} [Compressão em HTTP](https://developer.mozilla.org/pt-BR/docs/Web/HTTP/Guides/Compression). MDN, português.
+- [Documentação]{.selo} [functools.lru_cache](https://docs.python.org/pt-br/3/library/functools.html#functools.lru_cache). Python, português.
+- [Documentação]{.selo} [Connection pooling](https://docs.sqlalchemy.org/en/20/core/pooling.html). SQLAlchemy, inglês.
+- [Documentação]{.selo} [Caching no Streamlit](https://docs.streamlit.io/develop/concepts/architecture/caching). Inglês.
+:::

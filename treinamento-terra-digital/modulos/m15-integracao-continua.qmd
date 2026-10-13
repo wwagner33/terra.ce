@@ -1,0 +1,367 @@
+---
+title: "M15 · Integração e entrega contínuas"
+subtitle: "GitHub Actions, verificações em cada pull request e o caminho até a produção"
+---
+
+::: {.ficha-modulo}
+**Duração:** 6 a 8 horas · **Obrigatório para:** infraestrutura · **Recomendado para:** backend · **Pré-requisitos:** [M11](m11-testes.qmd), [M14](m14-containers.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Desde a versão 1.2.0, todo push e todo pull request do dashboard rodam o lint e
+os 291 testes no GitHub Actions. O miniserver ainda não tem esse workflow, e a
+implantação continua manual: build na máquina de alguém, push no Docker Hub,
+atualização no Portainer. A equipe quer automatizar esse caminho sem trocar a
+infraestrutura.
+:::
+
+## Objetivos
+
+- Diferenciar integração contínua, entrega contínua e implantação contínua.
+- Ler e escrever um workflow do GitHub Actions.
+- Configurar a verificação do miniserver.
+- Desenhar uma entrega automática com aprovação humana.
+- Manter segredos e permissões seguros na CI.
+
+## 1. CI e CD
+
+- **Integração contínua (CI)**: cada mudança enviada é verificada
+  automaticamente (lint, testes, build). Problemas aparecem em minutos, no
+  pull request, e não na produção.
+- **Entrega contínua (CD)**: cada versão aprovada gera automaticamente um
+  artefato pronto para produção, como uma imagem no Docker Hub.
+- **Implantação contínua**: a versão aprovada vai para a produção sem
+  intervenção humana.
+
+O projeto tem CI no dashboard. A entrega e a implantação contínuas estão
+propostas, com uma decisão em aberto: implantar direto a partir da `main` ou
+exigir uma aprovação humana antes da produção.
+
+## 2. Anatomia de um workflow
+
+O workflow do dashboard
+([`.github/workflows/testes.yml`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/.github/workflows/testes.yml)):
+
+```yaml
+name: Testes
+
+on:                                   # <1>
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:                          # <2>
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-latest            # <3>
+    env:
+      CI: "true"
+      JWT_SECRET: segredo-de-ci-com-mais-de-32-bytes-0123456789   # <4>
+    steps:
+      - uses: actions/checkout@v4     # <5>
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: .python-version
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Instalar dependências
+        run: pip install -r requirements-dev.txt   # <6>
+      - name: Lint
+        run: ruff check .
+      - name: Testes
+        run: python -m pytest -q
+```
+1. Quando rodar: em todo push na `main` e em todo pull request.
+2. Permissões mínimas: o workflow só lê o repositório.
+3. Uma máquina virtual Ubuntu nova a cada execução.
+4. Um segredo **de mentira**, só para os testes. O miniserver é simulado, então nenhum segredo real é necessário.
+5. `uses` chama uma ação pronta, numa versão fixada (`@v4`). Em outubro de 2026 já existiam a `checkout@v7` e a `setup-python@v7`; atualizar as versões, de preferência com o Dependabot, é uma manutenção que vale fazer de tempos em tempos.
+6. `run` executa um comando no shell da máquina.
+
+~~~exercicio
+id: m15-chaves
+tipo: associar
+pergunta: Associe cada chave do workflow ao que ela define.
+pares:
+  - termo: "`on`"
+    definicao: Os eventos que disparam o workflow
+  - termo: "`jobs`"
+    definicao: Os conjuntos de passos, que podem rodar em paralelo
+  - termo: "`runs-on`"
+    definicao: O tipo de máquina onde o job roda
+  - termo: "`uses`"
+    definicao: Uma ação pronta, de outro repositório
+  - termo: "`run`"
+    definicao: Um comando de shell
+  - termo: "`permissions`"
+    definicao: O que o token do workflow pode fazer no repositório
+explicacao: Com essas seis chaves dá para ler quase qualquer workflow.
+~~~
+
+~~~exercicio
+id: m15-ordem
+tipo: ordenar
+pergunta: Ordene os passos do workflow do dashboard.
+itens:
+  - Baixar o código do repositório
+  - Instalar o Python na versão do `.python-version`
+  - Instalar as dependências fixadas
+  - Rodar o lint com ruff
+  - Rodar os testes com pytest
+explicacao: O lint vem antes dos testes porque é mais rápido e pega erros bobos cedo.
+~~~
+
+~~~exercicio
+id: m15-segredo-falso
+tipo: escolha
+pergunta: Por que o workflow define `JWT_SECRET` com um valor inventado, escrito no próprio arquivo?
+opcoes:
+  - texto: Porque os testes só precisam de algum segredo para gerar e conferir tokens, e o miniserver é simulado
+    correta: true
+  - texto: Porque o GitHub não permite segredos em workflows
+    explicacao: O GitHub tem os "secrets" do repositório. Eles só não são necessários aqui.
+  - texto: Porque é o mesmo valor da produção, e está tudo bem por ser um repositório privado
+    explicacao: Nenhum valor de produção pode aparecer em arquivo versionado, seja o repositório público ou privado.
+explicacao: Bônus de segurança, pull requests vindos de forks não recebem os segredos do repositório, e mesmo assim os testes rodam.
+~~~
+
+## 3. Um workflow para o miniserver
+
+O miniserver ainda não tem CI. A diferença em relação ao dashboard: os testes
+carregam a extensão SpatiaLite do SQLite ([M11](m11-testes.qmd)), que precisa
+estar instalada no sistema da máquina do GitHub.
+
+~~~exercicio
+id: m15-spatialite
+tipo: texto
+pergunta: Qual pacote do Ubuntu instala a extensão SpatiaLite que os testes do miniserver carregam (`mod_spatialite`)?
+respostas:
+  - libsqlite3-mod-spatialite
+dica: É o mesmo pacote que o `Dockerfile.tgdmserver` instala com `apt-get`.
+explicacao: "Um passo `run: sudo apt-get update && sudo apt-get install -y libsqlite3-mod-spatialite` antes do pytest resolve."
+~~~
+
+Um esboço, para você completar e testar num fork:
+
+```yaml
+name: Testes
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  testes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Instalar o SpatiaLite
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-mod-spatialite
+      - name: Instalar dependências
+        run: pip install -r requirements-dev.txt
+      - name: Testes
+        run: python -m pytest -q
+```
+
+## 4. Entrega contínua: a proposta do projeto
+
+A proposta discutida pela equipe mantém a infraestrutura atual (Docker Hub e
+Portainer) e automatiza o que hoje é manual:
+
+```{mermaid}
+%%| fig-cap: "Proposta de entrega: a imagem é construída pela CI e a produção só muda depois de uma aprovação."
+flowchart TB
+    tag["git tag v1.3.0"] --> ci["GitHub Actions<br/>lint e testes"]
+    ci --> build["build da imagem<br/>tags 1.3.0 e o commit"]
+    build --> hub[("Docker Hub")]
+    hub --> aprov{"aprovação<br/>no ambiente production"}
+    aprov -->|aprovado| hook["webhook do Portainer"]
+    hook --> stack["stack atualizada"]
+```
+
+- Segredos necessários no GitHub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (um
+  token de acesso, nunca a senha) e `PORTAINER_WEBHOOK_URL`.
+- A **aprovação** usa os *Environments* do GitHub: um ambiente `production`
+  com revisores obrigatórios segura o job de implantação até alguém aprovar.
+- Implantar direto da `main`, sem aprovação, é mais rápido, mas uma mudança
+  mesclada por engano iria para o ar sozinha. **Essa política precisa ser
+  decidida pela coordenação antes de o workflow ser ativado.**
+
+~~~exercicio
+id: m15-aprovacao
+tipo: escolha
+pergunta: Que recurso do GitHub permite que o job de implantação espere a aprovação de uma pessoa?
+opcoes:
+  - texto: Um environment com revisores obrigatórios
+    correta: true
+  - texto: Uma branch protegida
+    explicacao: A proteção de branch controla o que entra na `main`, não quando um job roda.
+  - texto: Um secret com o nome APROVADO
+    explicacao: Secrets guardam valores. Não pausam workflows.
+explicacao: 'O job declara `environment: production`, e o GitHub pausa a execução até um revisor aprovar.'
+~~~
+
+## 5. Segurança na CI
+
+~~~exercicio
+id: m15-boas-praticas
+tipo: multipla
+pergunta: Quais destas práticas tornam a CI mais segura?
+opcoes:
+  - texto: Declarar `permissions` mínimas no workflow
+    correta: true
+  - texto: Fixar a versão das ações (`@v4`, ou melhor, o hash do commit)
+    correta: true
+  - texto: Imprimir os segredos no log para conferir se chegaram
+    explicacao: O GitHub mascara segredos conhecidos, mas transformações do valor escapam da máscara. Nunca imprima.
+  - texto: Usar um token de acesso do Docker Hub em vez da senha da conta
+    correta: true
+  - texto: Exigir que a CI passe antes de permitir o merge
+    correta: true
+  - texto: 'Usar `uses: alguem/acao@main`'
+    explicacao: A ponta de uma branch pode mudar a qualquer momento, inclusive para código malicioso.
+explicacao: |
+  Vale também ativar o *secret scanning* dos repositórios, o Dependabot para
+  avisar de dependências vulneráveis e uma varredura das imagens (por exemplo,
+  com o Trivy).
+~~~
+
+~~~exercicio
+id: m15-auditar
+tipo: python
+pergunta: |
+  Escreva `auditarWorkflow(texto)`, que lê um workflow com `yaml.safe_load` e
+  devolve os problemas encontrados: falta de `permissions` no topo e cada
+  `uses` sem versão (sem `@`) ou apontando para `@main` ou `@master`.
+inicial: |
+  import yaml
+
+  def auditarWorkflow(texto):
+      dados = yaml.safe_load(texto)
+      return []
+
+  exemplo = """
+  name: Testes
+  on: [push]
+  jobs:
+    testes:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: alguem/acao-util@main
+        - uses: outra/acao
+        - run: pytest
+  """
+  print(auditarWorkflow(exemplo))
+solucao: |
+  import yaml
+
+  def auditarWorkflow(texto):
+      dados = yaml.safe_load(texto) or {}
+      problemas = []
+      if "permissions" not in dados:
+          problemas.append("sem permissions no topo")
+      for nomeJob, job in (dados.get("jobs") or {}).items():
+          for passo in job.get("steps", []):
+              acao = passo.get("uses")
+              if not acao:
+                  continue
+              if "@" not in acao:
+                  problemas.append(f"{acao}: sem versão")
+              elif acao.split("@", 1)[1] in ("main", "master"):
+                  problemas.append(f"{acao}: aponta para uma branch")
+      return problemas
+
+  exemplo = """
+  name: Testes
+  on: [push]
+  jobs:
+    testes:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+        - uses: alguem/acao-util@main
+        - uses: outra/acao
+        - run: pytest
+  """
+  print(auditarWorkflow(exemplo))
+testes:
+  - nome: encontra os três problemas do exemplo
+    codigo: |
+      import textwrap
+      r = auditarWorkflow(textwrap.dedent(exemplo))
+      assert sorted(r) == sorted(["sem permissions no topo", "alguem/acao-util@main: aponta para uma branch", "outra/acao: sem versão"]), r
+  - nome: workflow correto não tem problemas
+    codigo: |
+      bom = "permissions:\n  contents: read\njobs:\n  a:\n    steps:\n      - uses: actions/checkout@v4\n      - run: ls\n"
+      assert auditarWorkflow(bom) == [], auditarWorkflow(bom)
+explicacao: |
+  Uma curiosidade: o PyYAML lê a chave `on` como o booleano `True` (regra do
+  YAML 1.1). Por isso a função não procura `dados["on"]`. Ferramentas como o
+  `actionlint` e o `zizmor` fazem essa auditoria de forma completa.
+~~~
+
+~~~exercicio
+id: m15-desenho
+tipo: aberta
+pergunta: Desenhe, em passos, o workflow de entrega do miniserver disparado por uma tag `v*`. Onde entram os testes, o build, o push, a aprovação e o webhook? O que acontece se o webhook falhar?
+resposta: |
+  1. **Gatilho**: `on: push: tags: ["v*"]`.
+  2. **Job de verificação**: lint e testes, como no workflow de CI. Se falhar, nada segue.
+  3. **Job de build** (`needs:` o anterior): login no Docker Hub com o token,
+     build com as tags da versão (`1.3.0`) e do commit, push.
+  4. **Job de implantação** com `environment: production` (revisores obrigatórios):
+     chama o `PORTAINER_WEBHOOK_URL` com `curl --fail`.
+  5. **Se o webhook falhar**: o job falha e avisa; a produção continua na versão
+     anterior, porque o Portainer não recebeu nada. A imagem já está no Docker
+     Hub, então dá para atualizar a stack à mão ou repetir o job.
+  6. Dashboard e miniserver devem ser implantados juntos quando o contrato mudar.
+~~~
+
+## 6. A CI deste próprio site
+
+O material que você está lendo também tem CI: a cada pull request que muda a
+pasta `treinamento-terra-digital/`, um workflow valida o YAML de todos os
+exercícios, roda as soluções de Python e SQL contra os próprios testes e
+renderiza o site. Na `main`, ele publica o resultado. Os detalhes estão em
+[como editar este material](../manual/material-didatico.qmd).
+
+## No código
+
+- [`testes.yml` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/.github/workflows/testes.yml).
+- [`publish-docker.sh` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/publish-docker.sh) e [do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/publish-docker.sh): o que a entrega automática substituiria.
+- [`Dockerfile.tgdmserver`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/Dockerfile.tgdmserver): o pacote do SpatiaLite.
+
+## Prática no projeto
+
+~~~exercicio
+id: m15-pratica
+tipo: checklist
+pergunta: Num fork do miniserver.
+itens:
+  - Escrevi o `.github/workflows/testes.yml` do miniserver a partir do esboço.
+  - Rodei o workflow no fork e corrigi até ficar verde.
+  - Introduzi um erro de propósito numa branch e vi o pull request ficar vermelho.
+  - Esbocei, sem ativar, o workflow de entrega por tag, com os segredos e o environment de aprovação.
+  - Rodei a função `auditarWorkflow` (ou o `actionlint`) nos workflows que escrevi.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Pipeline (CD/CI), Dicionário do Programador](https://www.youtube.com/watch?v=AZtTd3pFVTY). Código Fonte TV, 7 min, português.
+- [Vídeo]{.selo} [Criando um workflow automatizado de CI com o GitHub Actions](https://www.youtube.com/watch?v=F51HlrEeedw). Fernanda Kipper, 15 min, português.
+- [Documentação]{.selo} [GitHub Actions](https://docs.github.com/pt/actions). Português.
+- [Documentação]{.selo} [Webhooks do Portainer](https://docs.portainer.io/). Inglês.
+- [Ferramenta]{.selo} [actionlint](https://github.com/rhysd/actionlint): verifica a sintaxe e problemas comuns de workflows. Inglês.
+- [Ferramenta]{.selo} [Trivy](https://trivy.dev): procura vulnerabilidades em imagens. Inglês.
+:::

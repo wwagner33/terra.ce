@@ -1,0 +1,100 @@
+---
+title: "Glossário"
+subtitle: "Os termos do domínio e da tecnologia que aparecem no treinamento"
+---
+
+Use a busca do site (lupa no topo) para achar um termo. Cada um aponta para o
+módulo onde é explicado.
+
+## Domínio fundiário e privacidade
+
+| Termo | Significado | Módulo |
+|---|---|---|
+| **Assentamento** | Projeto de reforma agrária, com área, famílias e código no sistema do INCRA (SIPRA) | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Concentração fundiária** | O quanto da terra está nas mãos de poucos proprietários | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Curva de Lorenz** | Gráfico da fração acumulada da área contra a fração acumulada de proprietários | [M8](modulos/m08-mapas-graficos.qmd) |
+| **Dado pessoal** | Informação relacionada a pessoa natural identificada ou identificável (LGPD) | [M13](modulos/m13-lgpd.qmd) |
+| **Hectare (ha)** | 10.000 m², a unidade de área usada no cadastro | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **IDACE** | Instituto de Desenvolvimento Agrário do Ceará, responsável pelo cadastro | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Índice de Gini** | Medida de concentração de 0 (igualdade) a 1 (concentração máxima), calculada por proprietário | [M0](modulos/m00-dominio-fundiario.qmd), [M2](modulos/m02-python-dados.qmd) |
+| **INCRA** | Instituto Nacional de Colonização e Reforma Agrária; fixa o módulo fiscal de cada município | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **LGPD** | Lei Geral de Proteção de Dados Pessoais (Lei 13.709/2018) | [M13](modulos/m13-lgpd.qmd) |
+| **Lote** | Um registro da malha fundiária: um pedaço de terra com geometria e atributos | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Malha fundiária** | O conjunto dos imóveis rurais cadastrados, com seus polígonos | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Módulo fiscal (MF)** | Área em hectares fixada por município; base da classificação em pequena, média e grande propriedade | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Pseudonimização** | Troca do identificador por um código que só pode ser associado à pessoa com uma informação guardada à parte | [M13](modulos/m13-lgpd.qmd) |
+| **Região administrativa** | Agrupamento de municípios usado nos filtros do dashboard | [M0](modulos/m00-dominio-fundiario.qmd) |
+| **Situação jurídica** | Em que ponto o imóvel está na regularização (posse, domínio registrado etc.) | [M0](modulos/m00-dominio-fundiario.qmd) |
+
+## Geoprocessamento
+
+| Termo | Significado | Módulo |
+|---|---|---|
+| **Basemap (camada base)** | As imagens de fundo do mapa, servidas em *tiles* pela CARTO ou pelo OpenStreetMap | [M8](modulos/m08-mapas-graficos.qmd) |
+| **Datum** | O modelo da forma da Terra usado como referência para as coordenadas | [M3](modulos/m03-geoprocessamento.qmd) |
+| **Douglas-Peucker** | Algoritmo que simplifica linhas e polígonos removendo vértices dentro de uma tolerância | [M3](modulos/m03-geoprocessamento.qmd) |
+| **EPSG** | Catálogo de códigos de sistemas de referência (4326, 4674, 31984) | [M3](modulos/m03-geoprocessamento.qmd) |
+| **GeoJSON** | Formato JSON para geometrias, com coordenadas em longitude e latitude (RFC 7946) | [M3](modulos/m03-geoprocessamento.qmd) |
+| **GeoPandas** | Biblioteca que junta pandas e geometrias, com sistema de referência | [M3](modulos/m03-geoprocessamento.qmd) |
+| **GIST** | Tipo de índice do PostgreSQL usado para geometrias | [M4](modulos/m04-postgis.qmd) |
+| **Mapa coroplético** | Mapa em que cada área é pintada conforme um valor | [M8](modulos/m08-mapas-graficos.qmd) |
+| **PostGIS** | Extensão do PostgreSQL com tipos e funções espaciais | [M4](modulos/m04-postgis.qmd) |
+| **SIRGAS 2000** | O sistema de referência oficial do Brasil (EPSG:4674) | [M3](modulos/m03-geoprocessamento.qmd) |
+| **SpatiaLite** | Extensão espacial do SQLite, usada nos testes do miniserver | [M4](modulos/m04-postgis.qmd), [M11](modulos/m11-testes.qmd) |
+| **UTM** | Projeção em metros; o Ceará está na zona 24S (EPSG:31984) | [M3](modulos/m03-geoprocessamento.qmd) |
+| **WKT, WKB, EWKB** | Formatos de geometria em texto e em binário (o EWKB inclui o sistema de referência) | [M3](modulos/m03-geoprocessamento.qmd) |
+
+## Desenvolvimento e operação
+
+| Termo | Significado | Módulo |
+|---|---|---|
+| **Backoff exponencial** | Esperar cada vez mais entre tentativas que falharam | [M9](modulos/m09-engenharia-dados.qmd) |
+| **Branch** | Uma linha de trabalho no Git | [M1](modulos/m01-ambiente-git.qmd) |
+| **Cache** | Guardar um resultado para não recalcular; precisa de prazo ou de invalidação | [M7](modulos/m07-streamlit.qmd), [M10](modulos/m10-desempenho-cache.qmd) |
+| **CI/CD** | Verificação automática de cada mudança e entrega automática das versões | [M15](modulos/m15-integracao-continua.qmd) |
+| **Commit** | Um registro de mudanças no histórico do Git | [M1](modulos/m01-ambiente-git.qmd) |
+| **Container** | Uma imagem em execução, isolada, com uma camada gravável por cima | [M14](modulos/m14-containers.qmd) |
+| **CORS** | Regras do navegador sobre quais sites podem chamar uma API | [M6](modulos/m06-seguranca.qmd) |
+| **DataFrame** | Tabela do pandas, com colunas tipadas | [M2](modulos/m02-python-dados.qmd) |
+| **Dublê de teste** | Substituto de uma dependência num teste: *stub*, *fake* ou *mock* | [M11](modulos/m11-testes.qmd) |
+| **ETL** | Extrair, transformar e carregar dados | [M9](modulos/m09-engenharia-dados.qmd) |
+| **FastAPI** | Framework Python para APIs, usado no miniserver | [M5](modulos/m05-fastapi.qmd) |
+| **Fixture** | Preparação reutilizável de um teste no pytest | [M11](modulos/m11-testes.qmd) |
+| **Folium** | Biblioteca Python que gera mapas Leaflet | [M8](modulos/m08-mapas-graficos.qmd) |
+| **Gunicorn** | Gerente de processos que roda os workers do miniserver | [M5](modulos/m05-fastapi.qmd) |
+| **HMAC** | Código de autenticação calculado com uma chave secreta e uma função de hash | [M6](modulos/m06-seguranca.qmd), [M13](modulos/m13-lgpd.qmd) |
+| **Idempotência** | Rodar duas vezes dá o mesmo resultado que rodar uma | [M9](modulos/m09-engenharia-dados.qmd) |
+| **Imagem (Docker)** | Pacote somente leitura com sistema, bibliotecas e código, feito de camadas | [M14](modulos/m14-containers.qmd) |
+| **Injeção de SQL** | Texto do usuário interpretado como código SQL; evitado com parâmetros | [M5](modulos/m05-fastapi.qmd) |
+| **JWT** | Token assinado que o dashboard apresenta ao miniserver | [M6](modulos/m06-seguranca.qmd) |
+| **Lint** | Análise do código sem executá-lo, em busca de erros prováveis | [M12](modulos/m12-qualidade-documentacao.qmd) |
+| **Pull request** | Pedido para incorporar uma branch, com revisão e CI | [Manual](manual/fluxo-pull-request.qmd) |
+| **Pyodide** | Python compilado para rodar no navegador, usado nos exercícios | [Manual](manual/material-didatico.qmd) |
+| **Stack** | O conjunto de containers da produção, gerenciado pelo Portainer | [M14](modulos/m14-containers.qmd) |
+| **Streamlit** | Biblioteca Python para aplicações de dados, usada no dashboard | [M7](modulos/m07-streamlit.qmd) |
+| **Submódulo** | Repositório Git pendurado em outro, fixado num commit | [M1](modulos/m01-ambiente-git.qmd) |
+| **Tag** | Nome fixo para um commit (no Git) ou para uma versão de imagem (no Docker) | [M1](modulos/m01-ambiente-git.qmd), [M14](modulos/m14-containers.qmd) |
+| **TTL** | Tempo de vida de uma entrada de cache | [M7](modulos/m07-streamlit.qmd) |
+| **Upsert** | Inserir ou atualizar conforme a chave já exista (`ON CONFLICT`) | [M4](modulos/m04-postgis.qmd) |
+| **Volume** | Armazenamento que sobrevive ao container, como os dados do Postgres | [M14](modulos/m14-containers.qmd) |
+| **XSS** | Código injetado numa página por meio de dados exibidos sem escape | [M6](modulos/m06-seguranca.qmd) |
+
+~~~exercicio
+id: glossario-associar
+tipo: associar
+pergunta: Teste o vocabulário. Associe cada termo à definição.
+pares:
+  - termo: Idempotência
+    definicao: Rodar duas vezes dá o mesmo resultado que rodar uma
+  - termo: Pseudonimização
+    definicao: Código no lugar do nome, reversível com uma chave guardada à parte
+  - termo: Módulo fiscal
+    definicao: Área de referência fixada para cada município
+  - termo: Upsert
+    definicao: Inserir ou atualizar conforme a chave já exista
+  - termo: Mapa coroplético
+    definicao: Áreas pintadas conforme um valor
+  - termo: TTL
+    definicao: Prazo de validade de uma entrada de cache
+explicacao: Se errou algum, siga o link do termo no glossário até o módulo.
+~~~

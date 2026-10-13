@@ -1,0 +1,387 @@
+---
+title: "Como editar este material"
+subtitle: "Páginas, exercícios autocorrigidos, verificação e publicação do Terra Digital"
+---
+
+Este site é feito com o [Quarto](https://quarto.org) a partir de arquivos
+`.qmd` (Markdown com alguns recursos a mais). Corrigir um texto, acrescentar
+um link ou criar um exercício segue o mesmo fluxo de pull request do resto da
+plataforma, no repositório `terra.ce`.
+
+O material está sob a licença
+[CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/deed.pt-br),
+cujo texto está no arquivo `LICENSE`. Ao contribuir, você concorda que sua
+contribuição seja distribuída sob a mesma licença. Os trechos de código
+copiados da plataforma mantêm a licença dos repositórios de origem (GPL-3.0).
+
+## Estrutura da pasta
+
+```text
+treinamento-terra-digital/
+├── _quarto.yml                 # configuração do site: menu, tema, filtros
+├── index.qmd                   # página inicial
+├── comece/                     # como estudar, cronograma
+├── modulos/                    # M0 a M15
+├── manual/                     # este manual de contribuição
+├── projeto-integrador.qmd, glossario.qmd, referencias.qmd, progresso.qmd
+├── estilos/                    # terra.scss, terra-escuro.scss (cores) e comum.css (layout)
+├── imagens/                    # imagens do site
+├── _extensions/exercicios/     # o motor dos exercícios
+│   ├── exercicios.lua          #   filtro do Quarto: transforma ~~~exercicio em HTML
+│   ├── exercicios.js           #   monta, corrige e guarda o progresso no navegador
+│   ├── exercicios.css          #   aparência dos exercícios
+│   ├── trabalhadorPython.js    #   roda o Pyodide (Python no navegador) fora da página
+│   ├── executor.py             #   executa código e verificações (navegador e CI)
+│   ├── dadosSql.js             #   banco sintético dos exercícios de SQL (gerado)
+│   └── js-yaml.min.js          #   leitor de YAML (biblioteca externa, licença MIT)
+├── ferramentas/
+│   ├── exercicios.py           # índice, validação e teste dos exercícios
+│   ├── gerarDadosSinteticos.py # gera o dadosSql.js
+│   └── verificarLinks.py       # confere os links externos, inclusive os vídeos
+├── rodar.sh                    # roda o site na sua máquina (./rodar.sh ajuda)
+├── requirements.txt            # bibliotecas para validar e testar os exercícios
+└── LICENSE                     # licença do material (CC BY-NC-ND 4.0)
+```
+
+## Rodar na sua máquina
+
+1. Instale o [Quarto](https://quarto.org/docs/get-started/) (versão 1.8 ou mais nova).
+2. Para testar os exercícios, tenha também o Python 3.13, a versão do Pyodide
+   que os roda no navegador. Quem usa o asdf já recebe essa versão pelo
+   `.tool-versions` do superprojeto.
+3. Na pasta `treinamento-terra-digital`, use o script `rodar.sh`:
+
+| Comando | O que faz |
+|---|---|
+| `./rodar.sh` | abre o site em <http://localhost:4200> e recarrega a cada arquivo salvo |
+| `./rodar.sh testar` | valida o YAML dos exercícios e roda as soluções |
+| `./rodar.sh verificar` | faz o que a CI faz num pull request: testar e construir |
+| `./rodar.sh construir` | gera o site completo em `_site/` |
+| `./rodar.sh servir` | serve o `_site/` como no GitHub Pages, sem recarregar |
+| `./rodar.sh links` | confere os links externos |
+| `./rodar.sh limpar` | apaga os arquivos gerados (o `.venv/` fica) |
+| `./rodar.sh ajuda` | mostra os comandos e as opções |
+
+Na primeira vez, o `testar` e o `verificar` criam o `.venv/` e instalam as
+bibliotecas do `requirements.txt`, o que leva cerca de um minuto. Depois, só
+reinstalam quando esse arquivo muda. Para usar outra porta, rode
+`PORTA=5000 ./rodar.sh`. No Windows, rode o script pelo Git Bash ou pelo WSL.
+
+O site precisa ser servido por HTTP, como o script faz, porque os exercícios
+de Python não funcionam com o HTML aberto direto do disco (`file://`).
+
+Antes de abrir o pull request, rode `./rodar.sh verificar`.
+
+O script só encadeia comandos que também podem ser rodados à mão:
+`quarto preview`, `quarto render` e
+`.venv/bin/python ferramentas/exercicios.py testar`.
+
+## Escrever uma página
+
+Cada módulo segue o mesmo roteiro: ficha, "por que isso importa", objetivos,
+explicação, exercícios ao longo do texto, "no código", prática guiada e "para
+aprofundar". Recursos do Quarto que o material usa:
+
+| Recurso | Como escrever |
+|---|---|
+| Ficha do módulo | `::: {.ficha-modulo}` ... `:::` |
+| Caixa de destaque | `::: {.callout-note}`, `.callout-tip`, `.callout-warning`, `.callout-important` |
+| Diagrama | bloco ` ```{mermaid} ` com `%%| fig-cap: "legenda"` na primeira linha |
+| Código com notas numeradas | `# <1>` no fim da linha e a lista numerada logo depois do bloco |
+| Cartões | `::: {.cartoes}` com `::: {.cartao}` dentro |
+| Lista de recursos | `::: {.recursos}` com itens `[Vídeo]{.selo} [Título](url). Canal, duração, idioma.` |
+
+### Estilo do texto
+
+- Português do Brasil, frases curtas, voz ativa. Explique o termo técnico na
+  primeira vez que ele aparece.
+- Todo exemplo de código vem do projeto, com link para o arquivo **na tag da
+  versão** (`.../blob/v1.2.0/...`), não na `main`, para o link não envelhecer.
+- Fatos sobre o projeto (números, decisões, achados) precisam ser conferidos
+  no código ou nos documentos. Na dúvida, não afirme.
+- Links para aprofundar: prefira conteúdo em português e indique sempre o
+  idioma e a duração dos vídeos. Confira se o vídeo existe antes de citar.
+- Nada de dados reais: exemplos usam municípios reais com valores fictícios e
+  pseudônimos no lugar de nomes.
+
+## Criar um exercício
+
+Um exercício é um bloco cercado por `~~~exercicio` e `~~~`, com YAML dentro:
+
+````markdown
+~~~exercicio
+id: m02-gini-manual
+tipo: numero
+pergunta: Calcule o Gini das áreas `[2, 2, 2, 14]`.
+resposta: 0.45
+tolerancia: 0.001
+dica: "Soma das áreas: 20."
+explicacao: Σ i·x = 68, então G = 1,7 − 1,25 = 0,45.
+~~~
+````
+
+::: {.callout-warning}
+## Três armadilhas do YAML
+1. **Use `~~~` para cercar o exercício**, não ` ``` `. Assim o exercício pode
+   ter blocos de código ` ``` ` dentro da pergunta ou da explicação.
+2. **Texto com `: ` (dois-pontos e espaço) precisa de aspas**:
+   `pergunta: 'O que faz `environment: production`?'`. Sem aspas, o YAML
+   acha que é outro campo.
+3. **Texto que começa com aspas, crase, `*`, `[`, `{` ou `-`** também precisa
+   de aspas em volta. Na dúvida, use o bloco `|`, que aceita qualquer texto:
+   ```yaml
+   explicacao: |
+     Qualquer texto aqui, inclusive "aspas", `código` e dois-pontos: sem problema.
+   ```
+:::
+
+### Campos comuns
+
+| Campo | Obrigatório | Para quê |
+|---|---|---|
+| `id` | sim | identificador único no site inteiro: minúsculas, números e hífens. Use o prefixo do módulo (`m03-...`) |
+| `tipo` | sim | um dos dez tipos abaixo |
+| `pergunta` | sim | o enunciado, em Markdown simples (negrito, itálico, `código`, links, listas e blocos de código) |
+| `explicacao` | recomendado | aparece para quem acerta e em "Ver solução" |
+| `dica` | não | aparece no botão "Dica" |
+
+::: {.callout-note}
+## Não troque o `id` de um exercício publicado
+O progresso de quem estuda é guardado pelo `id`. Mudar o `id` apaga o
+progresso daquele exercício para todo mundo.
+:::
+
+### Os dez tipos
+
+`escolha`: uma opção certa.
+
+```yaml
+tipo: escolha
+opcoes:
+  - texto: Opção certa
+    correta: true
+  - texto: Opção errada
+    explicacao: Por que está errada (aparece se a pessoa escolher esta).
+```
+
+`multipla`: uma ou mais certas; a pessoa precisa marcar todas e só elas. Mesmo
+formato de `opcoes`.
+
+`numero`: aceita vírgula ou ponto; `tolerancia` é a diferença máxima aceita.
+
+```yaml
+tipo: numero
+resposta: 122.5
+tolerancia: 0.5
+unidade: ha
+```
+
+`texto`: resposta curta. Maiúsculas, acentos, aspas e espaços extras são
+ignorados na comparação; `regex` é uma alternativa para formatos variados.
+
+```yaml
+tipo: texto
+respostas:
+  - libsqlite3-mod-spatialite
+regex: '^libsqlite3-mod-spatialite$'
+```
+
+`ordenar`: escreva os `itens` **na ordem certa**; o site embaralha.
+
+```yaml
+tipo: ordenar
+itens:
+  - Primeiro passo
+  - Segundo passo
+  - Terceiro passo
+```
+
+`associar`: cada `termo` com a sua `definicao`; as definições precisam ser diferentes entre si.
+
+```yaml
+tipo: associar
+pares:
+  - termo: EPSG:4326
+    definicao: Coordenadas em graus
+  - termo: EPSG:31984
+    definicao: Coordenadas em metros
+```
+
+`python`: o código roda no navegador com o [Pyodide](https://pyodide.org) 0.29.3.
+
+```yaml
+tipo: python
+inicial: |
+  def dobro(x):
+      return x
+solucao: |
+  def dobro(x):
+      return 2 * x
+testes:
+  - nome: dobra um número
+    codigo: |
+      assert dobro(3) == 6, f"devolveu {dobro(3)}"
+```
+
+- `inicial` é o que a pessoa vê; `solucao`, o que aparece em "Ver solução".
+- Cada teste roda **depois** do código da pessoa, no mesmo espaço de nomes, e
+  passa se não lançar exceção. A mensagem do `assert` é o que a pessoa lê
+  quando falha: escreva uma mensagem útil.
+- Testes podem definir funções auxiliares que os seguintes usam; prefira nomes
+  com `_` na frente para não colidir com o código da pessoa.
+- Bibliotecas disponíveis: a biblioteca padrão e os
+  [pacotes do Pyodide](https://pyodide.org/en/stable/usage/packages-in-pyodide.html),
+  entre eles numpy, pandas, shapely, pyproj, geopandas, matplotlib, pyyaml e
+  sqlite3. **Folium, Streamlit e PyJWT não estão disponíveis.**
+- Não há acesso à rede, e a execução para depois de 30 segundos.
+- Atenção às versões: o Pyodide traz o pandas 2.3, e o dashboard usa o pandas 3.
+  Escreva código que funcione nos dois.
+
+`sql`: a consulta roda num SQLite do navegador sobre o banco sintético
+`fundiario` (tabelas `municipios`, `lotes` e `assentamentos`).
+
+```yaml
+tipo: sql
+dados: fundiario
+inicial: |
+  SELECT * FROM lotes;
+solucao: |
+  SELECT municipio, COUNT(*) AS imoveis FROM lotes GROUP BY municipio ORDER BY imoveis DESC, municipio;
+ordem: true
+```
+
+O resultado da pessoa é comparado com o da `solucao`: mesmo número de colunas
+e de linhas, mesmos valores (números com até 6 casas). Com `ordem: true`, a
+ordem das linhas também conta; peça na pergunta um critério de desempate. Para
+mudar o banco, edite `ferramentas/gerarDadosSinteticos.py` e rode-o: **mudar o
+banco pode quebrar exercícios existentes**, e o `testar` mostra quais.
+
+`aberta`: a pessoa escreve, compara com a `resposta` comentada e marca se cobriu os pontos.
+
+```yaml
+tipo: aberta
+resposta: |
+  - Ponto esperado 1
+  - Ponto esperado 2
+```
+
+`checklist`: prática guiada, sem correção; conta como concluída quando todos os itens são marcados.
+
+```yaml
+tipo: checklist
+itens:
+  - Fiz a primeira coisa.
+  - Fiz a segunda coisa.
+```
+
+~~~exercicio
+id: material-cerca
+tipo: escolha
+pergunta: Você vai escrever um exercício cuja pergunta mostra um trecho de código num bloco cercado por três crases. Como cerca o exercício?
+opcoes:
+  - texto: "Com `~~~exercicio` na abertura e `~~~` no fechamento"
+    correta: true
+  - texto: Com três crases seguidas de `exercicio` na abertura e três crases no fechamento
+    explicacao: As três crases do bloco de código de dentro da pergunta fechariam o exercício antes da hora.
+  - texto: Não dá; exercícios não podem ter blocos de código
+    explicacao: Podem, e vários exercícios deste site têm.
+explicacao: Cercas de til (`~`) só fecham com til, então as crases de dentro ficam livres.
+~~~
+
+~~~exercicio
+id: material-python-regras
+tipo: multipla
+pergunta: Quais destas afirmações valem para um exercício do tipo `python`?
+opcoes:
+  - texto: A `solucao` precisa passar em todos os testes, ou o pull request é reprovado na CI
+    correta: true
+  - texto: O código `inicial` não deve passar em todos os testes
+    correta: true
+  - texto: O exercício pode usar `import folium` para montar um mapa
+    explicacao: O Folium não está no Pyodide. Use funções puras, como `classeGini` ou `pontosLorenz`.
+  - texto: A mensagem do `assert` é o que a pessoa lê quando o teste falha
+    correta: true
+  - texto: O exercício pode baixar dados de uma URL
+    explicacao: O código roda sem acesso à rede. Os dados ficam no próprio enunciado.
+explicacao: O `testar` confere as duas primeiras automaticamente. As outras dependem de quem escreve.
+~~~
+
+## A verificação automática
+
+```bash
+./rodar.sh testar      # ou: .venv/bin/python ferramentas/exercicios.py testar
+```
+
+- confere o YAML de todos os exercícios: campos obrigatórios, tipos, `id`
+  único, uma só opção certa nas de `escolha`, e assim por diante;
+- roda a `solucao` de cada exercício de Python contra os próprios testes, e
+  avisa se o código `inicial` já passa em tudo;
+- roda a `solucao` de cada exercício de SQL no banco sintético.
+
+O mesmo comando roda na CI de cada pull request que muda o material, antes de
+renderizar o site ([publicação](publicacao.qmd#publicar-este-site-de-treinamento)).
+
+Antes de cada `quarto render` ou `quarto preview`, o `exercicios.py` também
+regera o `indiceExercicios.js`, que alimenta a página
+[Meu progresso](../progresso.qmd).
+
+~~~exercicio
+id: material-comando
+tipo: texto
+pergunta: Que comando, rodado na pasta do material, valida os exercícios e roda as soluções?
+respostas:
+  - ./rodar.sh testar
+  - rodar.sh testar
+  - python ferramentas/exercicios.py testar
+  - .venv/bin/python ferramentas/exercicios.py testar
+  - python3 ferramentas/exercicios.py testar
+explicacao: "`./rodar.sh testar` chama o `ferramentas/exercicios.py testar`. O comando `validar` só confere o YAML; o `testar` também executa as soluções."
+~~~
+
+Uma vez por semestre, ou antes de uma revisão geral, confira também os links
+externos. Sites mudam de endereço e vídeos saem do ar:
+
+```bash
+./rodar.sh links
+```
+
+## Quando o código da plataforma mudar
+
+O material descreve a versão 1.2.0. A cada versão nova:
+
+1. Procure os links para a versão antiga: `grep -rn "blob/v1.2.0" --include=*.qmd .`
+2. Confira se o trecho citado continua igual e se os números de linha (`#L20-L30`) ainda batem.
+3. Troque para a nova tag e ajuste o texto e os exercícios que mudaram.
+4. Atualize a "Versão de referência" na página inicial.
+5. Pendências citadas como prática (por exemplo, o padrão errado em `config.py`)
+   que forem resolvidas devem ser trocadas por outras do plano de melhoria.
+
+## Melhorias no motor dos exercícios
+
+O motor fica em `_extensions/exercicios/`. Mudanças nele afetam todas as
+páginas: teste com a página [Como estudar](../comece/como-estudar.qmd), que tem
+um exercício de cada tipo, nos temas claro e escuro e no celular. Os nomes no
+código seguem a convenção camelCase em português do projeto.
+
+~~~exercicio
+id: material-pratica
+tipo: checklist
+pergunta: Sua primeira contribuição para o material.
+itens:
+  - "Rodei `./rodar.sh` e naveguei pelo site localmente."
+  - Corrigi um erro ou acrescentei um link útil numa página.
+  - Criei um exercício novo, com explicação, num módulo que estudei.
+  - "Rodei `./rodar.sh verificar` sem erros."
+  - Abri o pull request no `terra.ce` e acompanhei a CI do material.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Quarto Crash Course](https://www.youtube.com/watch?v=_VKxTPWDhA4). Posit, 1 h 36 min, inglês.
+- [Documentação]{.selo} [Sites com Quarto](https://quarto.org/docs/websites/). Inglês.
+- [Documentação]{.selo} [Markdown no Quarto](https://quarto.org/docs/authoring/markdown-basics.html). Inglês.
+- [Documentação]{.selo} [Diagramas no Quarto](https://quarto.org/docs/authoring/diagrams.html). Inglês.
+- [Documentação]{.selo} [Pyodide](https://pyodide.org/en/stable/). Inglês.
+- [Documentação]{.selo} [YAML em 5 minutos (Learn X in Y minutes)](https://learnxinyminutes.com/yaml/). Inglês.
+:::

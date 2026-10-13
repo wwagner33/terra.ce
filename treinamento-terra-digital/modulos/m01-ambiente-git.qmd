@@ -1,0 +1,331 @@
+---
+title: "M1 · Ambiente de desenvolvimento e Git"
+subtitle: "Os projetos rodando na sua máquina e o superprojeto com submódulos"
+---
+
+::: {.ficha-modulo}
+**Duração:** 6 a 8 horas · **Obrigatório para:** todos os perfis (designers: seções 3 a 5) · **Pré-requisitos:** terminal básico
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+O Terra.Ce é um **superprojeto** que junta dois repositórios por meio de
+submódulos do Git. Isso confunde quem nunca usou: já aconteceu, no próprio
+projeto, de um `git submodule sync` trocar o endereço remoto de um submódulo e
+um push ir parar no repositório errado. Saber montar o ambiente e operar os
+submódulos com segurança é o primeiro passo para contribuir.
+:::
+
+## Objetivos
+
+- Instalar a versão certa do Python e criar ambientes virtuais.
+- Rodar as suítes de testes do miniserver e do dashboard.
+- Usar branches, commits e tags no dia a dia.
+- Entender o que o superprojeto guarda sobre cada submódulo e atualizar esse ponteiro.
+
+## 1. Terminal, variáveis de ambiente e caminhos
+
+Quase tudo no projeto passa pelo terminal. Os comandos que você vai usar o tempo
+todo:
+
+| Comando | Para quê |
+|---|---|
+| `cd pasta`, `ls -la`, `pwd` | Navegar e listar arquivos, inclusive os ocultos (que começam com ponto) |
+| `cat arquivo`, `less arquivo` | Ler um arquivo |
+| `grep -rn "texto" pasta/` | Procurar um texto em todos os arquivos de uma pasta |
+| `export NOME=valor` | Definir uma variável de ambiente para os próximos comandos |
+| `echo $NOME` | Ver o valor de uma variável |
+
+**Variáveis de ambiente** são o jeito padrão de passar configuração e segredos
+para os programas do projeto: `JWT_SECRET`, `DATA_SERVICE_URL`,
+`POSTGRES_PASSWORD`. Elas não ficam no código, e é isso que permite usar
+valores diferentes na sua máquina e em produção.
+
+## 2. Python na versão certa
+
+Os dois projetos fixam o Python em **3.13.11** no arquivo `.tool-versions`,
+lido pelo [asdf](https://asdf-vm.com), um gerenciador de versões. Com o asdf, ao
+entrar na pasta do projeto o comando `python` já aponta para a versão certa.
+
+Cada projeto tem o seu **ambiente virtual** (`.venv`): uma pasta com um Python
+isolado e as bibliotecas daquele projeto. Assim o dashboard pode usar uma
+versão do pandas e outro projeto, outra.
+
+```bash
+cd dashboard_fundiario_ceara
+python -m venv .venv                          # cria o ambiente
+.venv/bin/pip install -r requirements-dev.txt # instala as dependências fixadas
+.venv/bin/python -m pytest -q                 # roda os testes
+```
+
+As dependências ficam em dois arquivos:
+
+- `requirements.in`: só as bibliotecas que o projeto usa diretamente, sem versão;
+- `requirements.txt`: todas as bibliotecas, inclusive as indiretas, com a
+  versão exata testada. É ele que a imagem Docker e você instalam.
+
+~~~exercicio
+id: m01-requirements
+tipo: escolha
+pergunta: Você precisa instalar as dependências do dashboard para trabalhar. Qual arquivo usa?
+opcoes:
+  - texto: "`requirements-dev.txt`, que fixa as versões e inclui as ferramentas de teste"
+    correta: true
+  - texto: "`requirements.in`, porque é mais curto"
+    explicacao: O `.in` não fixa versões. Você instalaria versões diferentes das testadas.
+  - texto: Nenhum, basta `pip install streamlit`
+    explicacao: Faltariam dezenas de bibliotecas, e as versões não seriam as do projeto.
+explicacao: O `requirements-dev.txt` traz as dependências de produção fixadas mais pytest, requests-mock e ruff.
+~~~
+
+## 3. Git no dia a dia
+
+O Git guarda a história do código como uma sequência de **commits**. Cada
+commit é uma fotografia do projeto com uma mensagem que diz o que mudou. Uma
+**branch** é uma linha de trabalho; você cria uma para cada mudança e, quando
+ela está pronta, ela entra na `main` por um **pull request** revisado. Uma
+**tag** marca um commit importante, como uma versão publicada (`v1.2.0`).
+
+```{mermaid}
+%%| fig-cap: "Uma branch de estudo que sai da main e volta por merge."
+gitGraph
+  commit id: "v1.1.0" tag: "v1.1.0"
+  commit id: "corrige duplicação"
+  branch estudo-maria
+  checkout estudo-maria
+  commit id: "nova página"
+  commit id: "teste da página"
+  checkout main
+  merge estudo-maria
+  commit id: "v1.2.0" tag: "v1.2.0"
+```
+
+| Comando | O que faz |
+|---|---|
+| `git status` | Mostra o que mudou e o que está preparado para o próximo commit |
+| `git switch -c estudo/seu-nome` | Cria uma branch nova e muda para ela |
+| `git add arquivo` | Prepara a mudança de um arquivo para o commit |
+| `git commit -m "Adiciona página de imóveis por região"` | Registra as mudanças preparadas |
+| `git push -u origin estudo/seu-nome` | Envia a branch para o GitHub |
+| `git log --oneline -10` | Mostra os últimos commits |
+
+As mensagens de commit do projeto são curtas e dizem **o que** mudou, no
+imperativo ou no presente: "Corrige a duplicação de assentamentos", "Aponta o
+submódulo do dashboard para a org".
+
+~~~exercicio
+id: m01-comandos
+tipo: associar
+pergunta: Associe cada comando ao que ele faz.
+pares:
+  - termo: "`git status`"
+    definicao: Mostra os arquivos alterados e os preparados
+  - termo: "`git add`"
+    definicao: Prepara uma mudança para o próximo commit
+  - termo: "`git commit`"
+    definicao: Registra as mudanças preparadas na história local
+  - termo: "`git push`"
+    definicao: Envia os commits da branch para o repositório remoto
+  - termo: "`git switch -c`"
+    definicao: Cria uma branch nova e passa a trabalhar nela
+explicacao: Esse é o ciclo básico de toda contribuição.
+~~~
+
+~~~exercicio
+id: m01-nao-commitar
+tipo: multipla
+pergunta: Quais destes arquivos **nunca** devem entrar num commit?
+opcoes:
+  - texto: "`.env` com a senha do Postgres"
+    correta: true
+  - texto: "`.streamlit/secrets.toml` com o `JWT_SECRET`"
+    correta: true
+  - texto: "`datasets/malha_fundiaria_ceara.csv`"
+    correta: true
+  - texto: "`.venv/`"
+    correta: true
+  - texto: "`requirements.txt`"
+    explicacao: Esse deve ser versionado. Ele garante que todos usem as mesmas versões.
+  - texto: "`.tool-versions`"
+    explicacao: Também deve ser versionado. Fixa a versão do Python.
+explicacao: |
+  Segredos (`.env`, `secrets.toml`), dados pessoais (os CSVs) e arquivos
+  gerados (`.venv`) ficam fora. O `.gitignore` de cada projeto já cuida disso,
+  mas confira sempre o `git status` antes de um commit.
+~~~
+
+## 4. O superprojeto e os submódulos
+
+O repositório `terra.ce` não tem o código das aplicações. Ele tem dois
+**submódulos**, que são outros repositórios Git pendurados numa pasta:
+
+```{mermaid}
+%%| fig-cap: "O superprojeto guarda um commit de cada submódulo, não uma branch."
+flowchart TB
+    s["terra.ce (superprojeto)<br/>commit 9897bd2"]
+    s -->|"aponta para 997f558 (v1.2.0)"| d["dashboard_fundiario_ceara<br/>github.com/Projeto-Cientista-Chefe-Terra"]
+    s -->|"aponta para d0859cc (v1.2.0)"| m["terraGeoDataMiniServer<br/>github.com/Projeto-Cientista-Chefe-Terra"]
+    s --- r["docker-compose.stack.yml<br/>IMPLANTACAO_PORTAINER.md<br/>treinamento-terra-digital/"]
+```
+
+O ponto central: **o superprojeto guarda um commit específico de cada
+submódulo**. Não guarda "a última versão da main". Quando você clona o
+superprojeto, cada submódulo vem exatamente naquele commit, com o `HEAD`
+destacado (*detached HEAD*), fora de qualquer branch.
+
+| Situação | Comando |
+|---|---|
+| Clonar tudo, nos commits registrados | `git clone --recurse-submodules https://github.com/wwagner33/terra.ce.git` |
+| Ver o commit de cada submódulo | `git submodule status` |
+| Baixar os submódulos depois de um clone simples | `git submodule update --init` |
+| Trabalhar dentro de um submódulo | `cd dashboard_fundiario_ceara && git switch main` |
+| Conferir para onde vai o push | `git remote -v` (dentro do submódulo) |
+
+O `README` do superprojeto sugere também `--remote-submodules`. Essa opção
+faz cada submódulo vir na ponta da branch remota, e não no commit registrado.
+É prático para desenvolver, mas não reproduz uma versão: para montar
+exatamente a 1.2.0, clone sem essa opção.
+
+### Atualizar o ponteiro de um submódulo
+
+Depois que uma mudança entra na `main` de um submódulo, o superprojeto
+continua apontando para o commit antigo até alguém atualizar o ponteiro:
+
+```bash
+cd dashboard_fundiario_ceara
+git fetch && git switch main && git pull     # traz o commit novo
+cd ..
+git add dashboard_fundiario_ceara            # registra o novo ponteiro
+git commit -m "Atualiza o submódulo do dashboard"
+```
+
+::: {.callout-warning}
+## Cuidado com `git submodule sync`
+Esse comando copia a URL do `.gitmodules` para o `origin` de cada submódulo.
+Se você fizer checkout de um commit antigo do superprojeto, cujo `.gitmodules`
+ainda tinha a URL antiga, e rodar o `sync`, o push seguinte do submódulo vai
+para o repositório antigo. Foi o que aconteceu em 30/09/2026. **Antes de
+qualquer push num submódulo, confira `git remote -v`.** O endereço certo é o
+da organização `Projeto-Cientista-Chefe-Terra`.
+:::
+
+~~~exercicio
+id: m01-submodulo-guarda
+tipo: escolha
+pergunta: O que o superprojeto `terra.ce` registra sobre o submódulo `dashboard_fundiario_ceara`?
+opcoes:
+  - texto: Um commit específico do repositório do dashboard
+    correta: true
+  - texto: O nome da branch que deve ser usada, por exemplo `main`
+    explicacao: O `.gitmodules` pode até ter uma branch configurada, mas o que o superprojeto versiona é o commit.
+  - texto: Uma cópia de todos os arquivos do dashboard
+    explicacao: Os arquivos ficam no repositório do dashboard. O superprojeto só aponta para ele.
+explicacao: É por isso que o superprojeto precisa de um commit novo sempre que o submódulo avança.
+~~~
+
+~~~exercicio
+id: m01-ordem-ponteiro
+tipo: ordenar
+pergunta: Coloque em ordem os passos para o superprojeto passar a usar um commit novo do dashboard.
+itens:
+  - Entrar na pasta `dashboard_fundiario_ceara`
+  - Trazer o commit novo com `git fetch` e `git pull`
+  - Voltar para a raiz do superprojeto
+  - Registrar o novo ponteiro com `git add dashboard_fundiario_ceara`
+  - Fazer o commit no superprojeto
+explicacao: O commit final é no superprojeto. Ele grava o novo commit do submódulo.
+~~~
+
+~~~exercicio
+id: m01-remote-submodules
+tipo: escolha
+pergunta: Você quer reproduzir exatamente a versão 1.2.0 para investigar um bug de produção. Como clona?
+opcoes:
+  - texto: "`git clone --recurse-submodules` e depois `git checkout v1.2.0` com `git submodule update`"
+    correta: true
+  - texto: "`git clone --recurse-submodules --remote-submodules`"
+    explicacao: Essa opção traz a ponta da branch remota de cada submódulo, que pode ter commits depois da 1.2.0.
+  - texto: Clono só o dashboard, na branch `main`
+    explicacao: A `main` pode ter avançado depois da versão publicada.
+explicacao: A tag fixa os commits. O `submodule update` põe cada submódulo no commit registrado naquela tag.
+~~~
+
+## 5. Os testes como rede de proteção
+
+Antes de mudar qualquer coisa, rode as suítes e veja tudo passar. Assim, se
+algo quebrar depois, você sabe que foi a sua mudança.
+
+```bash
+# Dashboard
+cd dashboard_fundiario_ceara
+.venv/bin/python -m pytest -q
+
+# Miniserver (precisa da biblioteca do SpatiaLite no sistema:
+# libspatialite no Fedora, libsqlite3-mod-spatialite no Debian e no Ubuntu)
+cd ../terraGeoDataMiniServer
+.venv/bin/python -m pytest -q
+```
+
+Em 12/10/2026 passavam 291 testes no dashboard e 112 no miniserver. Nenhum
+deles precisa de rede, do banco de produção ou de segredos reais: o
+[M11](m11-testes.qmd) explica como.
+
+~~~exercicio
+id: m01-versao-python
+tipo: texto
+pergunta: Qual versão exata do Python os dois projetos fixam no `.tool-versions`?
+respostas:
+  - "3.13.11"
+  - "python 3.13.11"
+explicacao: "Python 3.13.11. A mesma versão está na imagem base dos Dockerfiles: `python:3.13.11-slim-trixie`."
+~~~
+
+~~~exercicio
+id: m01-fixar-versoes
+tipo: aberta
+pergunta: Por que o projeto fixa a versão exata de todas as dependências, em vez de instalar sempre a mais recente?
+resposta: |
+  - Reprodutibilidade: a sua máquina, a CI e a imagem de produção rodam as
+    mesmas versões, então um teste que passa aqui passa lá.
+  - Uma atualização de biblioteca pode mudar comportamento (o pandas 3, por
+    exemplo, mudou a cópia de dados). Atualizar vira uma decisão consciente,
+    feita com os testes rodando.
+  - Segurança: dá para saber exatamente que versão está em produção quando
+    sai um alerta de vulnerabilidade.
+~~~
+
+## No código
+
+- [`.gitmodules`](https://github.com/wwagner33/terra.ce/blob/main/.gitmodules): os dois submódulos e suas URLs.
+- [`REDME.md`](https://github.com/wwagner33/terra.ce/blob/main/REDME.md): o comando de clonagem do superprojeto.
+- [`requirements.in` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/requirements.in) e o [`requirements.txt`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/requirements.txt) gerado a partir dele.
+- [`pytest.ini` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/pytest.ini): onde ficam os testes e por que `pythonpath = .`.
+
+## Prática no projeto
+
+~~~exercicio
+id: m01-pratica
+tipo: checklist
+pergunta: Monte o seu ambiente.
+itens:
+  - Clonei o superprojeto com `--recurse-submodules` e conferi `git submodule status`.
+  - Instalei o Python 3.13.11 (asdf ou outro gerenciador) e a biblioteca do SpatiaLite.
+  - Criei o `.venv` de cada submódulo e instalei o `requirements-dev.txt`.
+  - Rodei as duas suítes de testes e todas passaram.
+  - Criei a branch `estudo/<meu-nome>` no dashboard, fiz um commit trivial e expliquei o que o `git status` do superprojeto mostra.
+  - Conferi `git remote -v` dentro de cada submódulo e confirmei que apontam para a organização.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [O que é Git? O que é versionamento?](https://www.youtube.com/watch?v=xEKo29OWILE). Curso em Vídeo, 30 min, português.
+- [Vídeo]{.selo} [Git Branches de forma fácil e com exemplo](https://www.youtube.com/watch?v=xAOBQtSVI_k). Curso em Vídeo, 50 min, português.
+- [Vídeo]{.selo} [Git Submodules Tutorial for Beginners](https://www.youtube.com/watch?v=gSlXo2iLBro). Redhwan Nacef, 15 min, inglês.
+- [Vídeo]{.selo} [Why everyone hates git submodules](https://www.youtube.com/watch?v=JESI498HSMA). Philomatics, 8 min, inglês.
+- [Interativo]{.selo} [Learn Git Branching](https://learngitbranching.js.org/?locale=pt_BR). Exercícios visuais de branches no navegador, português.
+- [Livro]{.selo} [Pro Git](https://git-scm.com/book/pt-br/v2). Scott Chacon e Ben Straub, gratuito, português.
+- [Documentação]{.selo} [Submódulos, no Pro Git](https://git-scm.com/book/en/v2/Git-Tools-Submodules). Inglês.
+- [Documentação]{.selo} [venv: ambientes virtuais](https://docs.python.org/pt-br/3/library/venv.html). Python, português.
+- [Documentação]{.selo} [asdf](https://asdf-vm.com). Inglês.
+:::

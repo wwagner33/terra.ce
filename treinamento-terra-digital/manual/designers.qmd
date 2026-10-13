@@ -1,0 +1,260 @@
+---
+title: "Guia para designers"
+subtitle: "Onde ficam cores, fontes, imagens e textos, e como propor mudanças por pull request"
+---
+
+Designers contribuem com a plataforma do mesmo jeito que programadores: por
+**pull request**. A diferença é que boa parte das mudanças de design cabe em
+um ou dois arquivos e pode ser feita **direto no navegador**, sem instalar nada.
+
+## Onde fica cada coisa no dashboard
+
+| O que mudar | Arquivo | Observação |
+|---|---|---|
+| Cor principal, fundo, fonte do tema | [`.streamlit/config.toml`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/.streamlit/config.toml), seção `[theme]` | `primaryColor = "#008241"`, `font = "Maitree"` |
+| Estilos finos (botões, abas, tabelas, títulos) | [`style.css`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/style.css) | variáveis no topo: `--cor-primaria`, `--cor-secundaria`, `--cor-dark-orange` |
+| Cores do menu lateral | [`modules/navegacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/navegacao.py) | `COR_BOTAO`, `COR_BOTAO_ATIVO`, `COR_BORDA` |
+| Paleta dos gráficos e do mapa de Gini | [`public/cores.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/public/cores.py) | `CORES` (categorias) e `CORES_GINI` (sequencial) |
+| Cores das camadas dos mapas | [`modules/constantes.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/constantes.py) | municípios, reservatórios, escolas, assentamentos |
+| Logo e imagens | [`assets/`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/tree/v1.2.0/assets) | o logo do topo é `assets/Frame 18.png` |
+| Textos e layout da página inicial | [`modules/paginaInicio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaInicio.py) | HTML dentro de textos Python |
+| Página "Sobre" | [`modules/paginaSobre.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaSobre.py) | parceiros, créditos e licença |
+| Título da aba e ícone | [`app.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/app.py) | `page_title`, `page_icon` |
+
+Neste site de treinamento, as cores e fontes ficam em
+[`estilos/terra.scss`](https://github.com/wwagner33/terra.ce/blob/main/treinamento-terra-digital/estilos/terra.scss)
+e `estilos/terra-escuro.scss`, e o layout dos componentes em
+`estilos/comum.css`.
+
+~~~exercicio
+id: design-arquivos
+tipo: associar
+pergunta: Associe cada mudança ao arquivo que você editaria no dashboard.
+pares:
+  - termo: Trocar a cor do botão da página ativa no menu
+    definicao: modules/navegacao.py
+  - termo: Ajustar a paleta das categorias nos gráficos de pizza e barras
+    definicao: public/cores.py
+  - termo: Mudar a fonte principal do tema
+    definicao: .streamlit/config.toml
+  - termo: Substituir o logo do topo
+    definicao: assets/
+  - termo: Reescrever o texto de apresentação da página inicial
+    definicao: modules/paginaInicio.py
+explicacao: Quando não tiver certeza, pesquise o valor atual (por exemplo, o código da cor) no repositório. A busca do GitHub (tecla `/`) encontra o arquivo.
+~~~
+
+## Três jeitos de propor uma mudança
+
+### A. Direto no site do GitHub (texto, cores, uma imagem)
+
+1. Abra o arquivo no repositório, na branch `main`.
+2. Clique no ícone de **lápis** (*Edit this file*).
+3. Faça a mudança. Para imagens, use **Add file → Upload files** na pasta `assets/`.
+4. Clique em **Commit changes...**, escreva uma mensagem curta ("Ajusta o
+   contraste dos rótulos das abas") e escolha **Create a new branch for this
+   commit and start a pull request**. Dê um nome como `design/contraste-abas`.
+5. Na tela seguinte, preencha a descrição com **o que muda, por quê, e prints
+   de antes e depois**, e clique em **Create pull request**.
+
+Neste site, o link **Editar essa página** no fim de cada página leva direto
+ao passo 2.
+
+### B. No editor web `github.dev` (vários arquivos)
+
+Com o repositório aberto no GitHub, aperte a tecla **`.`** (ponto). Abre um
+VS Code no navegador, com todos os arquivos. Edite o que precisar, vá em
+**Source Control** (o ícone de ramificação), crie uma branch, faça o commit e
+publique. O GitHub oferece abrir o pull request em seguida.
+
+### C. Na sua máquina (para ver o resultado rodando)
+
+É o caminho para mudanças de layout que só dá para avaliar com o dashboard no
+ar. Na primeira vez, peça a alguém de programação para montar o ambiente com
+você ([M1](../modulos/m01-ambiente-git.qmd)). Depois, é só:
+
+```bash
+cd dashboard_fundiario_ceara
+source .venv/bin/activate
+streamlit run app.py          # abra http://localhost:8501/paineis
+```
+
+Com `runOnSave = true` no `config.toml`, o dashboard recarrega sozinho a cada
+arquivo salvo. Para os dados aparecerem, o miniserver local também precisa
+estar rodando (ou use um ambiente de estudo preparado pela equipe).
+
+~~~exercicio
+id: design-github-dev
+tipo: texto
+pergunta: Que tecla, apertada num repositório aberto no GitHub, abre o editor web com todos os arquivos?
+respostas:
+  - "."
+  - ponto
+  - a tecla ponto
+explicacao: O ponto troca `github.com` por `github.dev` no endereço e abre o editor.
+~~~
+
+## Regras de design do projeto
+
+### Contraste e acessibilidade
+
+O requisito RNF01 pede que a plataforma funcione bem no computador e no
+celular, e um painel público precisa ser legível por todo mundo. A referência
+é a **WCAG 2.1, nível AA**:
+
+- texto normal: contraste de pelo menos **4,5:1** com o fundo;
+- texto grande (a partir de 24 px, ou 19 px em negrito) e elementos de interface: **3:1**;
+- informação **nunca só pela cor**: legenda, rótulo ou padrão junto.
+
+O verde do projeto, `#008241`, tem 4,9:1 sobre o branco: passa para texto. Já
+o laranja `--cor-dark-orange` (`#ed6a23`), usado nos rótulos dos filtros e nas
+abas, tem cerca de 3,1:1: serve para texto grande, não para rótulos comuns.
+Ajustá-lo é uma boa primeira contribuição de design.
+
+~~~exercicio
+id: design-contraste
+tipo: python
+pergunta: |
+  Implemente `razaoDeContraste(cor1, cor2)` pela fórmula da WCAG: converta
+  cada canal de `#rrggbb` para 0–1, linearize (`c/12.92` se `c <= 0.04045`,
+  senão `((c + 0.055) / 1.055) ** 2.4`), calcule a luminância
+  `0.2126 R + 0.7152 G + 0.0722 B` e devolva `(maior + 0.05) / (menor + 0.05)`.
+inicial: |
+  def luminancia(cor):
+      return 0.0
+
+  def razaoDeContraste(cor1, cor2):
+      return 1.0
+
+  print(round(razaoDeContraste("#008241", "#ffffff"), 2))
+solucao: |
+  def luminancia(cor):
+      cor = cor.lstrip("#")
+      canais = [int(cor[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+      lineares = [c / 12.92 if c <= 0.04045 else ((c + 0.055) / 1.055) ** 2.4 for c in canais]
+      return 0.2126 * lineares[0] + 0.7152 * lineares[1] + 0.0722 * lineares[2]
+
+  def razaoDeContraste(cor1, cor2):
+      maior, menor = sorted([luminancia(cor1), luminancia(cor2)], reverse=True)
+      return (maior + 0.05) / (menor + 0.05)
+
+  print(round(razaoDeContraste("#008241", "#ffffff"), 2))
+testes:
+  - nome: preto sobre branco é 21:1
+    codigo: |
+      assert abs(razaoDeContraste("#000000", "#ffffff") - 21) < 0.01, razaoDeContraste("#000000", "#ffffff")
+  - nome: a ordem das cores não importa
+    codigo: |
+      assert abs(razaoDeContraste("#ffffff", "#008241") - razaoDeContraste("#008241", "#ffffff")) < 1e-9
+  - nome: o verde do projeto sobre branco tem cerca de 4,92:1
+    codigo: |
+      assert abs(razaoDeContraste("#008241", "#ffffff") - 4.92) < 0.01, razaoDeContraste("#008241", "#ffffff")
+  - nome: o laranja dos rótulos não passa no AA para texto normal
+    codigo: |
+      r = razaoDeContraste("#ed6a23", "#ffffff")
+      assert 3 < r < 4.5, r
+explicacao: |
+  Ferramentas como o verificador da WebAIM fazem a mesma conta. Ter a função
+  no código permite até um teste automático que reprove cores sem contraste.
+~~~
+
+~~~exercicio
+id: design-secundaria
+tipo: numero
+pergunta: Usando a sua função (ou o verificador da WebAIM), qual é a razão de contraste da `--cor-secundaria` do dashboard, `#5db12f`, sobre o branco? Responda com duas casas.
+resposta: 2.69
+tolerancia: 0.02
+explicacao: |
+  2,69:1. Não serve nem para texto grande (3:1). Use essa cor só em elementos
+  decorativos ou com texto escuro por cima.
+~~~
+
+### Imagens
+
+- Guarde as imagens **no repositório**, em `assets/`. Hoje as páginas Início e
+  Sobre ainda carregam imagens de `i.imgur.com` e do site do IDACE (achado S8):
+  se esses endereços mudarem, as imagens somem, e cada visitante tem o
+  endereço de IP enviado a terceiros.
+- Prefira **SVG** para logos e ícones; **WebP** ou PNG otimizado para fotos.
+  Uma imagem de 3 MB numa página que muita gente abre pelo celular custa caro.
+- Toda imagem precisa de **texto alternativo** (`alt`) que diga o que ela
+  mostra, e de **crédito e licença** quando não for do projeto.
+- Prints para pull requests e apresentações **nunca** mostram nomes reais de
+  proprietários. Use o ambiente de estudo com dados sintéticos.
+
+### Cores em gráficos e mapas
+
+- Quantidades usam paleta **sequencial**; categorias, paleta **qualitativa**
+  ([M8](../modulos/m08-mapas-graficos.qmd)).
+- Teste a paleta com um simulador de daltonismo (o [ColorBrewer](https://colorbrewer2.org)
+  já filtra paletas seguras).
+- Mudou uma cor no gráfico? Confira se a legenda e o mapa continuam
+  consistentes: a mesma categoria tem de ter a mesma cor em todas as páginas.
+
+### Particularidades do Streamlit
+
+- O `style.css` é aplicado em todas as páginas por `aplicarCss()`. Os
+  seletores usam nomes internos do Streamlit (`.stButton`, `.stTabs`), que
+  podem mudar quando a biblioteca é atualizada: confira o visual depois de
+  cada atualização.
+- Para estilizar um widget específico, use a classe que o Streamlit cria a
+  partir da `key` do widget: `.st-key-<chave>`. É assim que o menu destaca a
+  página ativa ([M7](../modulos/m07-streamlit.qmd)).
+- As fontes vêm do Google Fonts. Fonte nova precisa ser declarada no
+  `config.toml` e no `@import` do `style.css`.
+
+~~~exercicio
+id: design-imagens
+tipo: multipla
+pergunta: Quais destas práticas valem para imagens no dashboard?
+opcoes:
+  - texto: Guardar a imagem em `assets/` em vez de apontar para um site externo
+    correta: true
+  - texto: Escrever um texto alternativo que descreva a imagem
+    correta: true
+  - texto: Usar o print do mapa real com nomes de proprietários na página Sobre
+    explicacao: Prints nunca podem mostrar dados pessoais.
+  - texto: Preferir SVG para logos e ícones
+    correta: true
+  - texto: Subir a foto original da câmera, sem redimensionar, para manter a qualidade
+    explicacao: Redimensione e comprima para o tamanho em que a imagem aparece. Quem abre pelo celular agradece.
+explicacao: Imagem local, leve, descrita e sem dados pessoais.
+~~~
+
+## O pull request de design
+
+A descrição de um PR de design traz, além do modelo do
+[passo a passo](fluxo-pull-request.qmd#abra-o-pull-request):
+
+- **prints de antes e depois**, no computador e no celular (o navegador
+  simula o celular nas ferramentas de desenvolvedor, com `Ctrl+Shift+M`);
+- **as razões de contraste** das cores novas;
+- o **link do protótipo**, se houver (Figma ou outro).
+
+Quem revisa um PR de design olha consistência com o resto da plataforma,
+acessibilidade e o efeito em todas as páginas que usam o mesmo estilo.
+
+~~~exercicio
+id: design-pratica
+tipo: checklist
+pergunta: Sua primeira contribuição de design.
+itens:
+  - Escolhi uma melhoria pequena (por exemplo, o contraste do laranja dos rótulos ou uma imagem externa da página Sobre).
+  - Fiz a mudança pelo GitHub, pelo github.dev ou localmente, numa branch `design/...`.
+  - Conferi o contraste das cores novas e o resultado no celular.
+  - Abri o pull request com prints de antes e depois, sem dados pessoais.
+  - Respondi à revisão até a aprovação.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Web Accessibility Perspectives: colors with good contrast](https://www.youtube.com/watch?v=Hui87z2Vx8o). W3C WAI, 1 min, inglês com legendas.
+- [Vídeo]{.selo} [Como criar um Pull Request (PR) no GitHub](https://www.youtube.com/watch?v=U-Y_Mtdyo74). Willian Justen, 4 min, português.
+- [Ferramenta]{.selo} [Verificador de contraste da WebAIM](https://webaim.org/resources/contrastchecker/). Inglês.
+- [Leitura]{.selo} [WCAG 2.1: contraste mínimo](https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html). W3C, inglês.
+- [Documentação]{.selo} [Editar arquivos no GitHub](https://docs.github.com/pt/repositories/working-with-files/managing-files/editing-files). GitHub Docs, português.
+- [Documentação]{.selo} [O editor web github.dev](https://docs.github.com/pt/codespaces/the-githubdev-web-based-editor). GitHub Docs, português.
+- [Documentação]{.selo} [Temas no Streamlit](https://docs.streamlit.io/develop/concepts/configuration/theming). Inglês.
+- [Ferramenta]{.selo} [ColorBrewer](https://colorbrewer2.org). Paletas para mapas, inglês.
+:::

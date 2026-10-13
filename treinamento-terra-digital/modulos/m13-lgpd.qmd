@@ -1,0 +1,410 @@
+---
+title: "M13 · Privacidade e LGPD"
+subtitle: "Como a plataforma protege os proprietários pessoas físicas, e o que ainda falta"
+---
+
+::: {.ficha-modulo}
+**Duração:** 5 a 6 horas · **Obrigatório para:** todos os perfis · **Pré-requisitos:** [M0](m00-dominio-fundiario.qmd), [M6](m06-seguranca.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+A malha fundiária traz o nome de cada proprietário. Até setembro de 2026 esses
+nomes iam para o tooltip do mapa, e todos os nomes de uma região chegavam ao
+navegador de qualquer visitante (achado S3). Hoje o nome de pessoa física não
+sai da API. Quem mexe em dados, telas ou imagens da plataforma precisa saber
+por quê, e onde ainda há risco.
+:::
+
+::: {.callout-important}
+## Este módulo não é orientação jurídica
+Ele explica as escolhas técnicas do projeto à luz da LGPD. A regra de
+privacidade adotada é conservadora e aguarda revisão jurídica do IDACE
+(decisão D-5).
+:::
+
+## Objetivos
+
+- Reconhecer dado pessoal e os princípios da LGPD que mais pesam no projeto.
+- Explicar a regra que decide quando um nome pode ser exibido.
+- Entender a pseudonimização usada no cálculo do Gini.
+- Identificar riscos residuais de reidentificação e de vazamento.
+
+## 1. O essencial da LGPD
+
+A Lei Geral de Proteção de Dados Pessoais (Lei 13.709/2018) regula o
+**tratamento** de **dados pessoais**: qualquer operação, de coletar a exibir,
+com informação relacionada a **pessoa natural identificada ou
+identificável** (art. 5º). Pessoa jurídica não é titular: o nome de uma
+empresa ou de uma prefeitura não é dado pessoal.
+
+Os princípios do art. 6º que mais orientam as decisões técnicas do projeto:
+
+- **finalidade**: o dado serve a um propósito legítimo e informado, aqui a
+  transparência sobre a concentração fundiária;
+- **necessidade**: tratar o mínimo necessário para essa finalidade. Para
+  mostrar a concentração não é preciso exibir quem é cada proprietário;
+- **segurança** e **prevenção**: medidas técnicas para evitar acesso indevido e vazamentos;
+- **transparência** e **responsabilização**: poder explicar e demonstrar o que se faz com os dados.
+
+Dois conceitos técnicos da lei:
+
+- **anonimização**: o dado perde, de forma irreversível com meios razoáveis, a
+  associação com a pessoa. Dado anonimizado deixa de ser dado pessoal;
+- **pseudonimização**: o dado perde a associação direta, mas ela pode ser
+  refeita com uma informação mantida em separado (art. 13, § 4º). Dado
+  pseudonimizado **continua sendo dado pessoal**.
+
+~~~exercicio
+id: m13-dado-pessoal
+tipo: multipla
+pergunta: Quais destas informações são dados pessoais?
+opcoes:
+  - texto: O nome de um proprietário pessoa física
+    correta: true
+  - texto: A área de um imóvel, junto com o número do título que identifica o dono
+    correta: true
+  - texto: O nome "Agropecuária Boa Vista S/A"
+    explicacao: É pessoa jurídica. A LGPD protege pessoas naturais.
+  - texto: A área total dos imóveis de um município
+    explicacao: Um agregado de muitos imóveis não se relaciona a uma pessoa identificável.
+  - texto: O `id_proprietario` entregue pela API
+    correta: true
+explicacao: |
+  O `id_proprietario` é um pseudônimo: com a chave, dá para refazer a
+  associação. Por isso continua sendo dado pessoal e precisa dos mesmos
+  cuidados.
+~~~
+
+## 2. A regra: quando um nome pode aparecer
+
+A decisão D-5 do projeto: **o nome de pessoa física nunca é exibido**; ele
+vira "Pessoa física (protegido pela LGPD)". O nome aparece só quando identifica
+**com segurança** uma pessoa jurídica ou um ente público. A regra é a mesma nos
+dois projetos
+([dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/privacidade.py),
+[miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/privacidade.py)):
+
+- o nome, sem acentos e em maiúsculas, **termina** em `LTDA` ou `S/A` (ou `S.A.`); ou
+- traz um **termo institucional inequívoco**: associação, cooperativa,
+  sindicato, prefeitura, igreja, banco, universidade, INCRA, IDACE e outros.
+
+Ficam ocultos, de propósito:
+
+- **"SA" sem pontuação**, porque Sá é sobrenome comum;
+- **ME, MEI, EPP e EIRELI**, porque o empresário individual costuma usar o
+  próprio nome como razão social;
+- **espólio**, que traz o nome da pessoa falecida.
+
+Na dúvida, o nome fica oculto. O erro aceitável é esconder uma empresa; o
+inaceitável é expor uma pessoa.
+
+~~~exercicio
+id: m13-regra
+tipo: python
+pergunta: |
+  Implemente `ehPessoaJuridica(nome)`: normalize (sem acento, maiúsculas,
+  espaços simples) e devolva `True` se a forma jurídica ou um termo
+  institucional aparecer. As expressões regulares já estão prontas.
+inicial: |
+  import re, unicodedata
+
+  TERMOS = ["ASSOCIACAO", "ASSOC", "COOPERATIVA", "SINDICATO", "FUNDACAO", "INSTITUTO",
+            "EMPRESA", "COMPANHIA", "CIA", "AGROPECUARIA", "INDUSTRIA", "INDUSTRIAL",
+            "COMERCIO", "COMERCIAL", "PREFEITURA", "MUNICIPIO", "ESTADO DO CEARA",
+            "IGREJA", "PAROQUIA", "INCRA", "IDACE", "UNIVERSIDADE", "ESCOLA", "BANCO", "EOLICA"]
+  REGEX_INSTITUCIONAL = re.compile(r"\b(?:" + "|".join(TERMOS) + r")\b")
+  REGEX_FORMA_JURIDICA = re.compile(r"(?:\bLTDA\.?|\bS\s?/\s?A\.?|\bS\.A\.?)\s*$")
+
+  def normalizar(texto):
+      return texto
+
+  def ehPessoaJuridica(nome):
+      return False
+
+  print(ehPessoaJuridica("Fazenda Esperança Ltda."))
+solucao: |
+  import re, unicodedata
+
+  TERMOS = ["ASSOCIACAO", "ASSOC", "COOPERATIVA", "SINDICATO", "FUNDACAO", "INSTITUTO",
+            "EMPRESA", "COMPANHIA", "CIA", "AGROPECUARIA", "INDUSTRIA", "INDUSTRIAL",
+            "COMERCIO", "COMERCIAL", "PREFEITURA", "MUNICIPIO", "ESTADO DO CEARA",
+            "IGREJA", "PAROQUIA", "INCRA", "IDACE", "UNIVERSIDADE", "ESCOLA", "BANCO", "EOLICA"]
+  REGEX_INSTITUCIONAL = re.compile(r"\b(?:" + "|".join(TERMOS) + r")\b")
+  REGEX_FORMA_JURIDICA = re.compile(r"(?:\bLTDA\.?|\bS\s?/\s?A\.?|\bS\.A\.?)\s*$")
+
+  def normalizar(texto):
+      semAcento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode("ascii")
+      return re.sub(r"\s+", " ", semAcento.upper()).strip()
+
+  def ehPessoaJuridica(nome):
+      if not nome or not str(nome).strip():
+          return False
+      normalizado = normalizar(str(nome))
+      return bool(REGEX_FORMA_JURIDICA.search(normalizado) or REGEX_INSTITUCIONAL.search(normalizado))
+
+  print(ehPessoaJuridica("Fazenda Esperança Ltda."))
+testes:
+  - nome: formas jurídicas no fim do nome
+    codigo: |
+      for nome in ["Fazenda Esperança Ltda.", "AGROPECUARIA BOA VISTA S/A", "Banco do Nordeste do Brasil S.A."]:
+          assert ehPessoaJuridica(nome), nome
+  - nome: termos institucionais, com acento e em minúsculas
+    codigo: |
+      for nome in ["Prefeitura Municipal de Quixadá", "Associação dos Moradores do Sítio Riacho"]:
+          assert ehPessoaJuridica(nome), nome
+  - nome: pessoas físicas ficam ocultas
+    codigo: |
+      for nome in ["FULANO DE TAL ME", "BELTRANA SÁ", "ESPÓLIO DE SICRANO DE TAL", "Beltrano Ciano"]:
+          assert not ehPessoaJuridica(nome), nome
+  - nome: nome vazio não é pessoa jurídica
+    codigo: |
+      assert ehPessoaJuridica("") is False and ehPessoaJuridica(None) is False
+explicacao: |
+  "Beltrano Ciano" não vira pessoa jurídica por causa do `\b` (fronteira de
+  palavra): "CIA" dentro de "CIANO" não conta. Veja no próximo exercício o
+  que a regra ainda erra.
+~~~
+
+~~~exercicio
+id: m13-falsos
+tipo: aberta
+pergunta: |
+  Com a regra do projeto, "ANTONIO CIA" e "RAIMUNDA INDUSTRIAL" seriam
+  exibidos como pessoa jurídica, e "COMERCIAL SANTOS EIRELI" também.
+  Classifique cada caso como falso positivo, verdadeiro positivo ou dúvida,
+  e proponha como reduzir o risco.
+resposta: |
+  - "ANTONIO CIA" e "RAIMUNDA INDUSTRIAL": provavelmente **falsos positivos**,
+    se Cia e Industrial forem sobrenomes. Expõem uma pessoa, o erro mais grave.
+  - "COMERCIAL SANTOS EIRELI": **dúvida**. O termo "COMERCIAL" sugere empresa,
+    mas EIRELI é empresário individual, e "Santos" pode ser o nome da pessoa.
+  - Para reduzir o risco: exigir que termos ambíguos (CIA, INDUSTRIAL) venham
+    junto de outra evidência; fazer EIRELI e ME vencerem os termos
+    institucionais; e, melhor de tudo, usar o **tipo de pessoa (CPF ou CNPJ)**
+    do cadastro, se o IDACE puder fornecê-lo, em vez de adivinhar pelo nome.
+  - Toda mudança na regra precisa ser feita nos dois projetos ao mesmo tempo,
+    com testes, e passar pela revisão jurídica.
+~~~
+
+## 3. Duas barreiras
+
+```{mermaid}
+%%| fig-cap: "O nome real não sai do miniserver; o dashboard aplica a mesma regra de novo."
+flowchart TB
+    db[("PostGIS<br/>nome real")] --> mini["miniserver<br/>nome_proprietario_publico()<br/>pseudonimo_proprietario()"]
+    mini -->|"nome protegido<br/>+ id_proprietario"| dash["dashboard<br/>nomeProprietarioExibivel()<br/>escaparHtml()"]
+    dash -->|"HTML do mapa"| nav["navegador"]
+```
+
+- **Primeira barreira, no miniserver** (desde a 1.2.0): `/dados_fundiarios` e
+  `/geojson` trocam o nome de pessoa física pelo texto de proteção **antes**
+  de responder
+  ([`main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py#L270-L277)).
+  O nome real nunca chega à rede.
+- **Segunda barreira, no dashboard**: o mascaramento é aplicado de novo antes
+  de montar o mapa. Se um dia o dashboard falar com um miniserver antigo, ou se
+  outro endpoint passar a mandar nomes, a proteção continua.
+
+Essa ideia se chama **defesa em profundidade**: nenhuma camada sozinha é
+responsável pela proteção.
+
+~~~exercicio
+id: m13-duas-barreiras
+tipo: escolha
+pergunta: Se o miniserver já protege os nomes, por que o dashboard aplica a mesma regra de novo?
+opcoes:
+  - texto: Para que uma falha ou regressão numa camada não exponha os nomes
+    correta: true
+  - texto: Porque o miniserver só protege os nomes no GeoJSON
+    explicacao: Desde a 1.2.0 o miniserver protege nos dois endpoints que trazem nomes.
+  - texto: Porque o dashboard é mais rápido para aplicar a regra
+    explicacao: Desempenho não é o motivo; o custo é pequeno nos dois lados.
+explicacao: Uma regressão no miniserver, um miniserver antigo ou um endpoint novo esquecido continuam cobertos pela segunda barreira.
+~~~
+
+## 4. Pseudonimização para o Gini
+
+O Gini precisa agrupar os imóveis do mesmo proprietário ([M0](m00-dominio-fundiario.qmd)),
+mas o nome não pode sair. A API entrega então o `id_proprietario`: um
+**HMAC-SHA256** do nome normalizado, com uma chave secreta
+([`privacidade.py` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/privacidade.py#L88-L105)):
+
+```python
+def pseudonimo_proprietario(nome):
+    normalizado = normalizar_nome(nome)   # sem acento, minúsculas, sem espaços nas pontas
+    return hmac.new(_chave_pseudonimo(), normalizado.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+```
+
+- **Estável**: o mesmo nome gera o mesmo pseudônimo em todos os workers e regiões.
+- **Não reversível sem a chave**: diferente de um SHA-256 simples, que
+  qualquer um poderia calcular para uma lista de nomes comuns e comparar.
+- **A chave** é `PSEUDONIMIZACAO_SECRET` ou, se vazia, uma derivação do
+  `JWT_SECRET`. Quem tiver a chave e uma lista de nomes refaz a associação: é
+  pseudonimização, não anonimização.
+
+~~~exercicio
+id: m13-pseudonimo
+tipo: python
+pergunta: |
+  Implemente `pseudonimo(nome, chave)`: normalize o nome (sem acento,
+  minúsculas, sem espaços nas pontas), calcule o HMAC-SHA256 com a chave e
+  devolva os 32 primeiros caracteres do hexadecimal.
+inicial: |
+  import hashlib, hmac, unicodedata
+
+  def pseudonimo(nome, chave):
+      return nome
+
+  print(pseudonimo("João de Tal", b"chave-de-estudo"))
+solucao: |
+  import hashlib, hmac, unicodedata
+
+  def pseudonimo(nome, chave):
+      normalizado = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode("ascii").lower().strip()
+      return hmac.new(chave, normalizado.encode("utf-8"), hashlib.sha256).hexdigest()[:32]
+
+  print(pseudonimo("João de Tal", b"chave-de-estudo"))
+testes:
+  - nome: tem 32 caracteres hexadecimais
+    codigo: |
+      p = pseudonimo("João de Tal", b"k")
+      assert len(p) == 32 and all(c in "0123456789abcdef" for c in p), p
+  - nome: acento, maiúsculas e espaços nas pontas não mudam o pseudônimo
+    codigo: |
+      assert pseudonimo("João de Tal", b"k") == pseudonimo("  JOAO DE TAL ", b"k")
+  - nome: pessoas diferentes têm pseudônimos diferentes
+    codigo: |
+      assert pseudonimo("João de Tal", b"k") != pseudonimo("Beltrana de Tal", b"k")
+  - nome: outra chave gera outro pseudônimo
+    codigo: |
+      assert pseudonimo("João de Tal", b"k1") != pseudonimo("João de Tal", b"k2")
+  - nome: o pseudônimo não contém o nome
+    codigo: |
+      assert "tal" not in pseudonimo("João de Tal", b"k").lower()
+explicacao: |
+  Trocar a chave troca **todos** os pseudônimos de uma vez. Como o dashboard
+  calcula o Gini a partir de uma única carga, o índice não muda; o que muda é
+  que pseudônimos guardados antes deixam de corresponder aos novos.
+~~~
+
+## 5. Riscos que continuam
+
+Esconder o nome não esgota o problema. Três riscos merecem atenção:
+
+1. **Reidentificação por combinação.** O nome do imóvel, o número do INCRA,
+   a área exata e, principalmente, o **polígono do imóvel no mapa** podem,
+   cruzados com outras fontes, apontar para uma pessoa. A pergunta a fazer
+   para cada campo exibido é: ele é necessário para a finalidade do painel?
+2. **Os CSVs fora da API.** Os arquivos de `datasets/` têm os nomes reais. Eles
+   não estão no Git, mas o `.dockerignore` do miniserver não exclui a pasta: o
+   build copia os CSVs para dentro da imagem. O `rm -rf datasets` do
+   `entrypoint.sh` apaga a pasta só no container em execução; os arquivos
+   continuam nas **camadas da imagem**, ao alcance de quem puder baixá-la.
+   Separar a carga num serviço próprio ([M9](m09-engenharia-dados.qmd)) e
+   excluir `datasets/` do build resolvem o problema.
+3. **Terceiros.** O navegador de quem visita o dashboard baixa os tiles do
+   mapa da CARTO (ou do OpenStreetMap) e algumas imagens de outros sites
+   ([projeto integrador](../projeto-integrador.qmd#imagens-sem-terceiros-e-contraste)).
+   Cada pedido leva o endereço IP da pessoa e, no caso do mapa, a região que
+   ela está olhando. Não são dados do cadastro, mas são dados de quem usa o
+   painel: cada serviço de terceiros novo precisa de justificativa.
+
+~~~exercicio
+id: m13-camadas-imagem
+tipo: escolha
+pergunta: O `entrypoint.sh` apaga a pasta `datasets/` depois da carga. Isso tira os CSVs da imagem publicada no Docker Hub?
+opcoes:
+  - texto: Não. Os arquivos foram gravados numa camada da imagem durante o build, e apagar no container não muda a imagem.
+    correta: true
+  - texto: Sim, porque o container apaga a pasta na primeira execução.
+    explicacao: O container tem uma camada própria, gravável, por cima da imagem. A imagem em si é somente leitura.
+  - texto: Sim, desde que o container rode com o usuário terra.
+    explicacao: O usuário do container não muda o conteúdo das camadas da imagem.
+explicacao: |
+  O conteúdo de uma imagem só muda com um novo build. A correção é excluir a
+  pasta no `.dockerignore`, publicar uma imagem nova e remover as tags antigas
+  do registro, como foi feito com o `secrets.toml` ([M14](m14-containers.qmd)).
+~~~
+
+~~~exercicio
+id: m13-principios
+tipo: associar
+pergunta: Associe cada princípio da LGPD a uma prática do projeto.
+pares:
+  - termo: Necessidade
+    definicao: "`/dados_fundiarios` entrega pseudônimo em vez do nome real"
+  - termo: Segurança
+    definicao: API protegida por JWT e segredos fora das imagens
+  - termo: Finalidade
+    definicao: Os dados servem para mostrar a concentração fundiária do estado
+  - termo: Transparência
+    definicao: A página Sobre explica a origem dos dados e quem faz a plataforma
+explicacao: Princípios viram decisões de código. Ao propor uma tela nova, pergunte qual princípio ela pode ferir.
+~~~
+
+~~~exercicio
+id: m13-reidentificacao
+tipo: aberta
+pergunta: |
+  O tooltip da malha fundiária mostra, para cada imóvel, o nome do imóvel, o
+  nome do proprietário (protegido), a data de criação, o número do INCRA, o
+  número do lote, a área, a situação jurídica, o município e a categoria.
+  Avalie o risco de reidentificação e proponha uma mudança.
+resposta: |
+  - O **nome do imóvel** muitas vezes carrega o nome do dono ("Sítio do
+    Fulano", "Fazenda Dona Beltrana"): a regra de privacidade só protege o
+    campo `nome_proprietario`.
+  - O número do INCRA é um identificador ligado ao imóvel e, por meio de
+    outros cadastros, ao proprietário. Junto com o polígono no mapa, permite
+    chegar à pessoa.
+  - Pergunta-chave (necessidade): o painel precisa deles para mostrar a
+    estrutura fundiária? Para a maioria dos usos, área, categoria e situação
+    jurídica bastam.
+  - Propostas: retirar os identificadores do tooltip público; mantê-los só
+    numa versão com acesso controlado para a equipe do IDACE; documentar a
+    decisão com o IDACE.
+~~~
+
+## 6. Regras de convivência com dados pessoais
+
+- Os CSVs ficam só na máquina de trabalho. Nada de nuvem pessoal, pendrive
+  esquecido ou repositório particular.
+- Nunca cole dados reais em issues, prints, mensagens ou ferramentas de IA
+  externas.
+- Testes e exemplos usam **dados sintéticos**, como os deste site e os
+  `conftest.py` dos dois projetos.
+- Viu um nome real onde não deveria? Avise a coordenação e trate como
+  incidente, sem espalhar o exemplo.
+
+## No código
+
+- [`modules/privacidade.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/privacidade.py) do dashboard e [`data_service/privacidade.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/privacidade.py) do miniserver.
+- [`tests/test_privacidade.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_privacidade.py) e [`tests/test_lgpd_endpoints.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_lgpd_endpoints.py) do miniserver.
+- [README do dashboard, seção "Dados pessoais (LGPD)"](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/README.md#dados-pessoais-lgpd).
+- [`.dockerignore` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/.dockerignore): repare no que falta.
+
+## Prática no projeto
+
+~~~exercicio
+id: m13-pratica
+tipo: checklist
+pergunta: Nos dois projetos.
+itens:
+  - Montei 20 nomes de teste (pessoas, empresas, prefeitura, ME, Sá, espólio) e previ a saída antes de rodar as funções dos dois projetos.
+  - Confirmei que dashboard e miniserver dão o mesmo resultado para os 20 nomes.
+  - Listei os campos exibidos em cada página que permitem reidentificar alguém.
+  - Escrevi a proposta de correção do `.dockerignore` do miniserver para a pasta `datasets/` e levei à coordenação.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Direito digital e LGPD (resumo)](https://www.youtube.com/watch?v=So9Lhgbq2sk). Me Julga, 13 min, português.
+- [Vídeo]{.selo} [Anonimização e pseudonimização na LGPD: artigos 12 e 13](https://www.youtube.com/watch?v=XQSLcJwlDSI). Simone Santinato, 15 min, português.
+- [Vídeo]{.selo} [Securing Stream Ciphers (HMAC)](https://www.youtube.com/watch?v=wlSG3pEiQdc). Computerphile, 9 min, inglês.
+- [Leitura]{.selo} [Lei 13.709/2018 (LGPD)](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm). Planalto, português.
+- [Leitura]{.selo} [Autoridade Nacional de Proteção de Dados (ANPD)](https://www.gov.br/anpd/pt-br). Guias e orientações, português.
+- [Documentação]{.selo} [Módulo hmac](https://docs.python.org/pt-br/3/library/hmac.html). Python, português.
+- [Leitura]{.selo} [RFC 2104: HMAC](https://datatracker.ietf.org/doc/html/rfc2104). IETF, inglês.
+:::

@@ -1,0 +1,71 @@
+---
+title: "Referências"
+subtitle: "Livros, cursos, documentação e canais para continuar estudando"
+---
+
+Cada módulo tem a sua seção "Para aprofundar", com vídeos e leituras do
+assunto. Esta página reúne as fontes mais gerais, que valem para o
+treinamento inteiro.
+
+## Livros
+
+::: {.recursos}
+- [Livro]{.selo} [Pro Git](https://git-scm.com/book/pt-br/v2). Scott Chacon e Ben Straub. Gratuito, português.
+- [Livro]{.selo} [Python for Data Analysis, 3ª ed.](https://wesmckinney.com/book/). Wes McKinney. Versão aberta, inglês.
+- [Livro]{.selo} [Geographic Data Science with Python](https://geographicdata.science/book/). Sergio Rey, Dani Arribas-Bel e Levi Wolf. Gratuito, inglês.
+- [Livro]{.selo} [Fundamentals of Data Visualization](https://clauswilke.com/dataviz/). Claus Wilke. Gratuito, inglês.
+- [Livro]{.selo} *PostGIS in Action*, 3ª ed. Regina Obe e Leo Hsu. Manning, inglês.
+- [Livro]{.selo} *Designing Data-Intensive Applications*. Martin Kleppmann. O'Reilly, inglês.
+:::
+
+## Cursos gratuitos
+
+::: {.recursos}
+- [Curso]{.selo} [FastAPI do Zero](https://fastapidozero.dunossauro.com/). Eduardo Mendes. Texto e vídeos, português.
+- [Curso]{.selo} [Introduction to PostGIS](https://postgis.net/workshops/postgis-intro/). Workshop oficial do PostGIS, inglês.
+- [Curso]{.selo} [Pandas](https://www.kaggle.com/learn/pandas). Kaggle Learn, exercícios no navegador, inglês.
+- [Curso]{.selo} [Learn Git Branching](https://learngitbranching.js.org/?locale=pt_BR). Interativo, português.
+:::
+
+## Documentação essencial
+
+| Assunto | Documentação |
+|---|---|
+| Python | [docs.python.org/pt-br/3](https://docs.python.org/pt-br/3/) |
+| pandas | [pandas.pydata.org/docs](https://pandas.pydata.org/docs/) |
+| GeoPandas | [geopandas.org](https://geopandas.org/en/stable/docs/user_guide.html) |
+| PostGIS | [postgis.net/documentation](https://postgis.net/documentation/) |
+| FastAPI | [fastapi.tiangolo.com/pt](https://fastapi.tiangolo.com/pt/) |
+| Streamlit | [docs.streamlit.io](https://docs.streamlit.io) |
+| Folium | [python-visualization.github.io/folium](https://python-visualization.github.io/folium/latest/) |
+| pytest | [docs.pytest.org](https://docs.pytest.org/en/stable/) |
+| Docker | [docs.docker.com](https://docs.docker.com/get-started/) |
+| GitHub | [docs.github.com/pt](https://docs.github.com/pt) |
+| Quarto | [quarto.org](https://quarto.org/docs/guide/) |
+
+## Leis e normas
+
+::: {.recursos}
+- [Lei]{.selo} [Lei 13.709/2018: Lei Geral de Proteção de Dados Pessoais](https://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm).
+- [Lei]{.selo} [Lei 8.629/1993: reforma agrária e classificação dos imóveis](https://www.planalto.gov.br/ccivil_03/leis/l8629.htm).
+- [Lei]{.selo} [Lei 4.504/1964: Estatuto da Terra](https://www.planalto.gov.br/ccivil_03/leis/l4504.htm).
+- [Norma]{.selo} [WCAG 2.1](https://www.w3.org/TR/WCAG21/): diretrizes de acessibilidade para conteúdo web.
+- [Norma]{.selo} [RFC 7946 (GeoJSON)](https://datatracker.ietf.org/doc/html/rfc7946) e [RFC 7519 (JWT)](https://datatracker.ietf.org/doc/html/rfc7519).
+:::
+
+## Canais de vídeo em português
+
+Os canais que mais aparecem nos módulos, para quem gosta de aprender por vídeo:
+
+- **Código Fonte TV**, série *Dicionário do Programador*: conceitos de 10 minutos (JWT, cache, CI/CD, XSS, code review).
+- **Eduardo Mendes** (*Live de Python* e curso de FastAPI): Python moderno, testes e APIs.
+- **Curso em Vídeo**: Git e GitHub do zero.
+- **Anderson Medeiros (ClickGeo)**: geoprocessamento, sistemas de referência, PostGIS e QGIS.
+- **Hashtag Programação** e **Asimov Academy**: pandas, numpy e Streamlit.
+
+## O projeto
+
+- [Plano de treinamento](https://github.com/wwagner33/terra.ce/blob/main/PLANO_DE_TREINAMENTO.md), que deu origem a este site.
+- [Plano de melhoria do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md), com os achados e decisões citados no treinamento.
+- [Roteiro de implantação no Portainer](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md).
+- [Plataforma no ar](https://terrace.virtual.ufc.br/paineis).

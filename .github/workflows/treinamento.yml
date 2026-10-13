@@ -1,0 +1,74 @@
+# Valida, renderiza e publica o Treinamento Terra Digital (pasta treinamento-terra-digital/).
+#
+# Em pull request: valida o YAML dos exercícios, roda as soluções de Python e SQL
+# contra os próprios testes e renderiza o site. O site renderizado fica como
+# artefato do job, para quem revisa baixar e conferir.
+# Na main: faz o mesmo e publica no GitHub Pages.
+# Para publicar, ative o Pages em Settings → Pages → Source: GitHub Actions.
+name: Treinamento Terra Digital
+
+on:
+  pull_request:
+    paths:
+      - "treinamento-terra-digital/**"
+      - ".github/workflows/treinamento.yml"
+  push:
+    branches: [main]
+    paths:
+      - "treinamento-terra-digital/**"
+      - ".github/workflows/treinamento.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: treinamento-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: treinamento-terra-digital
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: treinamento-terra-digital/requirements.txt
+
+      - name: Instalar as dependências dos exercícios
+        run: pip install -r requirements.txt
+
+      - name: Validar e testar os exercícios
+        run: python ferramentas/exercicios.py testar
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: 1.8.26
+
+      - name: Renderizar o site
+        run: quarto render
+
+      - name: Guardar o site renderizado
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: treinamento-terra-digital/_site
+
+  publicar:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: verificar
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.publicacao.outputs.page_url }}
+    steps:
+      - id: publicacao
+        uses: actions/deploy-pages@v5

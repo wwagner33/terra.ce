@@ -1,0 +1,7 @@
+title: Exercícios autocorrigidos
+author: Treinamento Terra Digital
+version: 1.0.0
+quarto-required: ">=1.4.0"
+contributes:
+  filters:
+    - exercicios.lua

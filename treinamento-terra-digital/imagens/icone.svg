@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Terra Digital">
+  <rect width="64" height="64" rx="14" fill="#008241"/>
+  <path d="M10 44 C22 34, 30 40, 42 30 S54 22, 56 20" fill="none" stroke="#e1b87e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M10 52 C24 44, 34 50, 54 38" fill="none" stroke="#faf5f0" stroke-width="3" stroke-linecap="round" opacity="0.85"/>
+  <rect x="14" y="12" width="12" height="12" rx="2" fill="#faf5f0"/>
+  <rect x="30" y="12" width="12" height="12" rx="2" fill="#faf5f0" opacity="0.7"/>
+  <rect x="14" y="28" width="12" height="8" rx="2" fill="#faf5f0" opacity="0.5"/>
+</svg>

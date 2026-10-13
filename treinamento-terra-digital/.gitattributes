@@ -1,0 +1,2 @@
+# O rodar.sh precisa de fim de linha LF para rodar no Git Bash e no WSL.
+*.sh text eol=lf

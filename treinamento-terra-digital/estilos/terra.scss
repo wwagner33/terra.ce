@@ -1,0 +1,39 @@
+/* Tema claro do Treinamento Terra Digital: cores e fontes.
+ * As cores seguem o dashboard (dashboard_fundiario_ceara/.streamlit/config.toml).
+ * O layout dos componentes fica em comum.css, que vale para os dois temas.
+ * Designers: veja manual/designers.qmd antes de mudar algo aqui. */
+
+/*-- scss:defaults --*/
+
+$web-font-path: "https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&family=Raleway:ital,wght@0,400;0,600;0,700;1,400&display=swap";
+
+// Paleta do Terra.Ce
+$terra-verde: #008241;
+$terra-verde-escuro: #005f30;
+$terra-areia: #e1b87e;
+$terra-creme: #faf5f0;
+$terra-terracota: #8a3b12;
+
+$primary: $terra-verde;
+$link-color: $terra-verde-escuro;
+$body-color: #1d1d1b;
+
+$font-family-sans-serif: "Raleway", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+$headings-font-family: "Kanit", "Raleway", system-ui, sans-serif;
+$headings-font-weight: 500;
+
+$navbar-bg: $terra-verde;
+$navbar-fg: #ffffff;
+$sidebar-bg: $terra-creme;
+$footer-bg: $terra-creme;
+$code-color: $terra-terracota;
+
+/*-- scss:rules --*/
+
+// Cores usadas pelo comum.css.
+:root {
+  --terra-destaque: #{$terra-verde};
+  --terra-destaque-texto: #{$terra-verde-escuro};
+  --terra-acento: #{$terra-areia};
+  --terra-fundo-suave: #{$terra-creme};
+}

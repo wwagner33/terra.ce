@@ -1,0 +1,418 @@
+---
+title: "M11 · Testes automatizados"
+subtitle: "pytest, fixtures, dublês e testes que rodam sem rede e sem produção"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** todos os perfis que escrevem código · **Pré-requisitos:** [M5](m05-fastapi.qmd), [M7](m07-streamlit.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+Em setembro de 2026 o dashboard tinha 143 testes; na versão 1.2.0, 291, e o
+miniserver, 112. Foi essa rede que permitiu reescrever o `app.py` de 1.422
+linhas sem quebrar as páginas. Os testes também são a porta de entrada de
+qualquer pull request: se não passam na integração contínua, o código não
+entra.
+:::
+
+## Objetivos
+
+- Escrever testes com pytest, usando fixtures e parametrização.
+- Substituir dependências externas por dublês: API simulada, banco em memória.
+- Entender a ordem de importação no `conftest.py` do miniserver.
+- Avaliar se um teste realmente protege o código.
+- Reconhecer o que a suíte atual não cobre.
+
+## 1. Tipos de teste
+
+| Tipo | O que exercita | Exemplo no projeto |
+|---|---|---|
+| Unitário | uma função isolada | `test_classificacao.py`, `test_privacidade.py` |
+| Integração | partes juntas, com dublês nas bordas | os endpoints do miniserver sobre SQLite |
+| Fumaça | "liga e não explode" | `test_appFumaca.py`, que abre todas as páginas |
+| Arquitetura | regras do próprio código | `test_convencaoNomes.py`, `test_higieneRepositorio.py` |
+| Ponta a ponta | o sistema inteiro, de verdade | ainda não há; seria a stack real com navegador |
+
+A **pirâmide de testes** recomenda muitos testes unitários (rápidos e
+precisos), menos de integração e poucos de ponta a ponta (lentos e frágeis).
+
+## 2. pytest em uma página
+
+```python
+# tests/test_classificacao.py
+from modules.classificacao import classificarPorModuloFiscal
+
+def test_fronteiraDeQuatroModulosEhPequena():
+    assert list(classificarPorModuloFiscal([220], [55])) == ["Pequena Propriedade"]
+```
+
+- Arquivos `test_*.py` e funções `test_*` são descobertos sozinhos.
+- `assert` comum: quando falha, o pytest mostra os valores dos dois lados.
+- `python -m pytest -q` roda tudo; `-k fronteira` filtra pelo nome; `-x` para no primeiro erro.
+- O `pytest.ini` diz onde estão os testes e acrescenta a raiz do projeto ao `sys.path` (`pythonpath = .`).
+
+No dashboard os nomes de teste seguem a convenção: `test_` seguido de
+camelCase.
+
+### Fixtures
+
+Uma **fixture** prepara algo de que o teste precisa. O teste a recebe pelo
+nome do parâmetro:
+
+```python
+@pytest.fixture
+def miniserverSimulado(requests_mock):
+    requests_mock.get(TODAS, json=criarResponderApi())
+    return requests_mock
+
+def test_paginaRenderizaSemExcecao(miniserverSimulado, pagina): ...
+```
+
+- `scope="session"` cria uma vez para a suíte inteira (o banco SQLite do miniserver);
+- `autouse=True` aplica a todos os testes sem precisar pedir. O dashboard
+  usa isso para desligar a consulta a `/versao_dados`, exceto nos testes que
+  usam o miniserver simulado ou são marcados com `comVersao`;
+- `yield` em vez de `return` permite limpar depois do teste.
+
+### Parametrização
+
+```python
+@pytest.mark.parametrize("pagina", [p.chave for p in navegacao.PAGINAS])
+def test_paginaRenderizaSemExcecao(miniserverSimulado, pagina): ...
+```
+
+Um teste escrito uma vez vira nove, um por página.
+
+~~~exercicio
+id: m11-fixture
+tipo: escolha
+pergunta: O que faz uma fixture declarada com `autouse=True`?
+opcoes:
+  - texto: É aplicada a todos os testes do escopo, mesmo os que não a pedem como parâmetro
+    correta: true
+  - texto: É criada automaticamente uma única vez para a suíte inteira
+    explicacao: Isso é o `scope="session"`. Os dois podem ser combinados, como no banco do miniserver.
+  - texto: Gera dados aleatórios automaticamente
+    explicacao: Fixtures devolvem o que você programar. Nada é gerado sozinho.
+explicacao: É útil para garantias que valem sempre, como "nenhum teste fala com a versão real dos dados".
+~~~
+
+## 3. Testes que protegem de verdade
+
+Um teste que passa não prova nada se também passaria com o código errado. Uma
+forma de medir a qualidade dos testes é o **teste de mutação**: introduzir um
+erro pequeno de propósito (trocar `<=` por `<`, um 4 por um 5) e ver se algum
+teste falha. Se nenhum falhar, os testes deixaram o erro passar.
+
+~~~exercicio
+id: m11-mutacao
+tipo: python
+pergunta: |
+  Escreva funções de teste (nomes começando com `test_`) para
+  `classificar(area, moduloFiscal)`. As verificações deste exercício rodam
+  seus testes contra a função **certa**, que deve passar, e contra **quatro
+  versões com defeito**, que seus testes precisam reprovar.
+inicial: |
+  def classificar(area, moduloFiscal):
+      if area < moduloFiscal:
+          return "Pequena Propriedade < 1 MF"
+      if area <= 4 * moduloFiscal:
+          return "Pequena Propriedade"
+      if area <= 15 * moduloFiscal:
+          return "Média Propriedade"
+      return "Grande Propriedade"
+
+  def test_imovelMedio():
+      assert classificar(500, 55) == "Média Propriedade"
+solucao: |
+  def classificar(area, moduloFiscal):
+      if area < moduloFiscal:
+          return "Pequena Propriedade < 1 MF"
+      if area <= 4 * moduloFiscal:
+          return "Pequena Propriedade"
+      if area <= 15 * moduloFiscal:
+          return "Média Propriedade"
+      return "Grande Propriedade"
+
+  def test_abaixoDeUmModulo():
+      assert classificar(30, 55) == "Pequena Propriedade < 1 MF"
+
+  def test_exatamenteUmModuloEhPequena():
+      assert classificar(55, 55) == "Pequena Propriedade"
+
+  def test_exatamenteQuatroModulosEhPequena():
+      assert classificar(220, 55) == "Pequena Propriedade"
+
+  def test_exatamenteQuinzeModulosEhMedia():
+      assert classificar(825, 55) == "Média Propriedade"
+
+  def test_acimaDeQuinzeModulosEhGrande():
+      assert classificar(826, 55) == "Grande Propriedade"
+testes:
+  - nome: há pelo menos um teste e todos passam com a função certa
+    codigo: |
+      _testes = [f for nome, f in list(globals().items()) if nome.startswith("test_") and callable(f)]
+      assert _testes, "escreva funções cujo nome comece com test_"
+      for _t in _testes:
+          _t()
+  - nome: reprovam o mutante que trocou <= 4 MF por < 4 MF
+    codigo: |
+      _original = globals()["classificar"]
+      def _mutante(area, mf):
+          if area < mf: return "Pequena Propriedade < 1 MF"
+          if area < 4 * mf: return "Pequena Propriedade"
+          if area <= 15 * mf: return "Média Propriedade"
+          return "Grande Propriedade"
+      def _algumFalha(mutante):
+          globals()["classificar"] = mutante
+          try:
+              for _t in _testes:
+                  try:
+                      _t()
+                  except AssertionError:
+                      return True
+              return False
+          finally:
+              globals()["classificar"] = _original
+      assert _algumFalha(_mutante), "nenhum teste percebeu: falta testar exatamente 4 MF"
+  - nome: reprovam o mutante que trocou <= 15 MF por < 15 MF
+    codigo: |
+      def _mutante15(area, mf):
+          if area < mf: return "Pequena Propriedade < 1 MF"
+          if area <= 4 * mf: return "Pequena Propriedade"
+          if area < 15 * mf: return "Média Propriedade"
+          return "Grande Propriedade"
+      assert _algumFalha(_mutante15), "nenhum teste percebeu: falta testar exatamente 15 MF"
+  - nome: reprovam o mutante que trocou < 1 MF por <= 1 MF
+    codigo: |
+      def _mutante1(area, mf):
+          if area <= mf: return "Pequena Propriedade < 1 MF"
+          if area <= 4 * mf: return "Pequena Propriedade"
+          if area <= 15 * mf: return "Média Propriedade"
+          return "Grande Propriedade"
+      assert _algumFalha(_mutante1), "nenhum teste percebeu: falta testar exatamente 1 MF"
+  - nome: reprovam o mutante que nunca devolve "Grande Propriedade"
+    codigo: |
+      def _mutanteGrande(area, mf):
+          if area < mf: return "Pequena Propriedade < 1 MF"
+          if area <= 4 * mf: return "Pequena Propriedade"
+          return "Média Propriedade"
+      assert _algumFalha(_mutanteGrande), "nenhum teste percebeu: falta um caso de grande propriedade"
+explicacao: |
+  Os mutantes estão sempre nas **fronteiras**. Testar valores do meio de cada
+  faixa (500 ha, 1.000 ha) dá a sensação de cobertura sem proteger contra o
+  erro mais provável. Ferramentas como o `mutmut` automatizam essa técnica.
+~~~
+
+## 4. Dublês: testar sem rede, sem banco e sem segredos
+
+Nenhum teste do projeto precisa do miniserver de produção, do PostGIS ou de
+um segredo real. Isso é feito com **dublês de teste** (*test doubles*), que
+ficam no lugar das dependências:
+
+| Dublê | O que é | No projeto |
+|---|---|---|
+| *Stub* | devolve respostas prontas | `requests-mock` respondendo como o miniserver, no dashboard |
+| *Fake* | implementação simplificada que funciona de verdade | SQLite com SpatiaLite no lugar do PostGIS, no miniserver |
+| *Mock* | registra as chamadas para conferir depois | `requests_mock.call_count` para contar requisições |
+| `monkeypatch` | troca um atributo durante o teste | desligar `carregarVersaoDados` no dashboard |
+
+~~~exercicio
+id: m11-dubles
+tipo: associar
+pergunta: Associe cada técnica ao problema que ela resolve nos testes do projeto.
+pares:
+  - termo: "`requests-mock`"
+    definicao: Testar o dashboard sem o miniserver no ar
+  - termo: SQLite com SpatiaLite
+    definicao: Testar os endpoints sem um PostgreSQL rodando
+  - termo: "`TestClient` do FastAPI"
+    definicao: Fazer requisições à API sem abrir uma porta de rede
+  - termo: "`AppTest` do Streamlit"
+    definicao: Executar as páginas sem navegador
+  - termo: "`monkeypatch.setattr`"
+    definicao: Trocar uma função por outra só durante um teste
+explicacao: Cada dublê corta uma dependência lenta, instável ou que exigiria segredos.
+~~~
+
+~~~exercicio
+id: m11-fake
+tipo: python
+pergunta: |
+  `carregarRegioes(sessao, url)` faz `sessao.get(url)` e devolve a lista
+  `"regioes"` do JSON. Escreva uma classe `SessaoFalsa` que não acessa a
+  rede: guarda as URLs pedidas em `self.pedidas` e devolve uma resposta com o
+  método `json()`, configurada no construtor.
+inicial: |
+  def carregarRegioes(sessao, url):
+      return sessao.get(url).json().get("regioes", [])
+
+  class SessaoFalsa:
+      pass
+
+  sessao = SessaoFalsa({"regioes": ["Cariri", "Sertão Central"]})
+  print(carregarRegioes(sessao, "http://miniserver/regioes"))
+solucao: |
+  def carregarRegioes(sessao, url):
+      return sessao.get(url).json().get("regioes", [])
+
+  class RespostaFalsa:
+      def __init__(self, dados):
+          self.dados = dados
+
+      def json(self):
+          return self.dados
+
+  class SessaoFalsa:
+      def __init__(self, dados):
+          self.dados = dados
+          self.pedidas = []
+
+      def get(self, url, **opcoes):
+          self.pedidas.append(url)
+          return RespostaFalsa(self.dados)
+
+  sessao = SessaoFalsa({"regioes": ["Cariri", "Sertão Central"]})
+  print(carregarRegioes(sessao, "http://miniserver/regioes"))
+testes:
+  - nome: devolve as regiões configuradas
+    codigo: |
+      s = SessaoFalsa({"regioes": ["A", "B"]})
+      assert carregarRegioes(s, "http://x/regioes") == ["A", "B"]
+  - nome: registra a URL pedida
+    codigo: |
+      s = SessaoFalsa({"regioes": []})
+      carregarRegioes(s, "http://x/regioes")
+      assert s.pedidas == ["http://x/regioes"], s.pedidas
+  - nome: resposta sem a chave devolve lista vazia
+    codigo: |
+      assert carregarRegioes(SessaoFalsa({}), "http://x/regioes") == []
+explicacao: |
+  O `apiCliente` do dashboard usa uma `requests.Session` de verdade, e os
+  testes interceptam o HTTP com `requests-mock`, que faz o papel desta
+  `SessaoFalsa` sem precisar trocar o objeto.
+~~~
+
+## 5. A ordem de importação no miniserver
+
+O `config.py` do miniserver cria `settings = Settings()` **na importação**,
+lendo as variáveis de ambiente naquele instante ([M5](m05-fastapi.qmd)). Por
+isso o
+[`tests/conftest.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/conftest.py#L1-L80)
+do miniserver segue uma ordem rígida:
+
+1. troca o módulo `sqlite3` da biblioteca padrão pelo `pysqlite3`, que permite
+   carregar a extensão SpatiaLite;
+2. define `DATABASE_TYPE=sqlite`, o caminho de um banco temporário e um
+   `JWT_SECRET` só de teste em `os.environ`;
+3. **só então** importa a aplicação, monta o banco com dados sintéticos e
+   cria o `TestClient`.
+
+Se um arquivo de teste importar `config` antes do `conftest.py` terminar,
+os testes passam a usar a configuração errada.
+
+~~~exercicio
+id: m11-ordem-import
+tipo: escolha
+pergunta: Por que o `conftest.py` do miniserver define as variáveis de ambiente antes de `import data_service.main`?
+opcoes:
+  - texto: Porque `config.settings` é criado na importação e lê o ambiente naquele momento
+    correta: true
+  - texto: Porque o pytest exige que variáveis venham antes dos imports
+    explicacao: O pytest não tem essa regra. É uma necessidade deste projeto.
+  - texto: Porque o FastAPI lê o ambiente a cada requisição
+    explicacao: O FastAPI não lê o ambiente. Quem lê é o `Settings`, uma única vez.
+explicacao: Uma alternativa seria criar o `Settings` sob demanda, numa função. O projeto preferiu documentar a ordem no próprio conftest.
+~~~
+
+## 6. Testes de arquitetura
+
+Dois testes do dashboard não testam funcionalidades, e sim regras do projeto:
+
+- [`test_convencaoNomes.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/test_convencaoNomes.py)
+  lê o código com o módulo `ast` e reprova nomes fora do camelCase;
+- [`test_higieneRepositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/test_higieneRepositorio.py)
+  confere que o `secrets.toml` não está no Git e que o `.dockerignore` o
+  exclui da imagem.
+
+No miniserver,
+[`test_known_issues.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/tests/test_known_issues.py)
+documenta problemas reais do modo SQLite que ainda não foram corrigidos: um
+teste é a forma mais precisa de registrar um defeito.
+
+## 7. O que a suíte não cobre
+
+~~~exercicio
+id: m11-lacunas
+tipo: multipla
+pergunta: Quais destes problemas podem passar pela suíte atual sem ser percebidos?
+opcoes:
+  - texto: Um erro de sintaxe num trecho de SQL que só roda no PostgreSQL, como o `ILIKE`
+    correta: true
+  - texto: Um nome de função em snake_case no dashboard
+    explicacao: O `test_convencaoNomes.py` pega esse.
+  - texto: Uma página do dashboard que lança exceção ao abrir
+    explicacao: O teste de fumaça abre todas as páginas.
+  - texto: O dashboard e o miniserver discordarem sobre o formato de um campo da API
+    correta: true
+  - texto: Uma imagem Docker que não sobe por falta de uma variável
+    correta: true
+explicacao: |
+  Faltam testes de **contrato** (o dashboard simula a API do jeito que acha que
+  ela é), de **integração com PostgreSQL** e da **imagem**. São boas
+  contribuições, e uma delas está no [projeto integrador](../projeto-integrador.qmd).
+~~~
+
+~~~exercicio
+id: m11-integracao
+tipo: aberta
+pergunta: Proponha um teste de integração do miniserver contra um PostGIS de verdade. Onde ele rodaria e o que verificaria?
+resposta: |
+  - **Onde**: na integração contínua, com o PostGIS como serviço do job do
+    GitHub Actions, ou localmente com `testcontainers`, que sobe e derruba um
+    container para a suíte.
+  - **Como**: `DATABASE_TYPE=postgres` apontando para o container, o
+    `importer_all.py` carregando CSVs sintéticos (nunca os reais), e o
+    `TestClient` chamando os endpoints.
+  - **O quê**: os caminhos exclusivos do Postgres (`ILIKE`, `ST_AsGeoJSON` com
+    opções), a idempotência da carga (duas cargas, mesmas contagens) e o
+    `/versao_dados`.
+  - **Custo**: mais lento; por isso fica num job separado ou marcado, não
+    em todo `pytest` local.
+~~~
+
+## No código
+
+- [`tests/` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/tree/v1.2.0/tests): `conftest.py` com o miniserver simulado, testes por página e de arquitetura.
+- [`tests/` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/tree/v1.2.0/tests): `conftest.py` com SQLite e SpatiaLite, testes por endpoint e de autenticação.
+- [`pytest.ini` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/pytest.ini): o marcador `comVersao`.
+
+## Prática no projeto
+
+~~~exercicio
+id: m11-pratica
+tipo: checklist
+pergunta: Numa branch de estudo.
+itens:
+  - Escrevi um teste para `calcularGini` com o 0,4 do M2, lista vazia e valores iguais.
+  - Acrescentei casos a `test_privacidade.py` do miniserver (nomes com ME, EIRELI e espólio).
+  - "Medi a cobertura com `pytest-cov` (instalado só no meu ambiente) e escolhi um trecho importante sem teste."
+  - Rodei um teste de mutação manual numa função do projeto e confirmei que algum teste falhou.
+  - Esbocei o teste de integração com PostGIS real proposto acima.
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Pytest: uma introdução, Live de Python #167](https://www.youtube.com/watch?v=MjQCvJmc31A). Eduardo Mendes, 2 h, português.
+- [Vídeo]{.selo} [Pytest fixtures, Live de Python #168](https://www.youtube.com/watch?v=sidi9Z_IkLU). Eduardo Mendes, 1 h 52 min, português.
+- [Vídeo]{.selo} [Mock Objects, Dicionário do Programador](https://www.youtube.com/watch?v=-pdGBoiIvyc). Código Fonte TV, 12 min, português.
+- [Vídeo]{.selo} [Pirâmide de testes](https://www.youtube.com/watch?v=gVJ1Lap-JYA). Alura, 16 min, português.
+- [Leitura]{.selo} [Mocks Aren't Stubs](https://martinfowler.com/articles/mocksArentStubs.html). Martin Fowler, inglês.
+- [Leitura]{.selo} [The Practical Test Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html). Ham Vocke, inglês.
+- [Documentação]{.selo} [pytest](https://docs.pytest.org/en/stable/) e [pytest-cov](https://pytest-cov.readthedocs.io/en/latest/). Inglês.
+- [Documentação]{.selo} [requests-mock](https://requests-mock.readthedocs.io/en/latest/). Inglês.
+- [Documentação]{.selo} [Testes no FastAPI](https://fastapi.tiangolo.com/pt/tutorial/testing/). Português.
+- [Documentação]{.selo} [testcontainers-python](https://testcontainers-python.readthedocs.io/en/latest/). Inglês.
+:::

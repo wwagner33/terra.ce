@@ -1,0 +1,148 @@
+---
+title: "Revisão de código"
+subtitle: "Como revisar o pull request de alguém e como receber uma revisão"
+---
+
+A revisão é a última barreira antes do código entrar na `main` e a melhor
+forma de espalhar conhecimento na equipe. Quem revisa aprende o código novo;
+quem é revisado aprende com quem conhece outras partes.
+
+## O que olhar
+
+Siga a ordem: os problemas graves primeiro, os detalhes por último.
+
+1. **O pull request faz o que diz?** Leia a issue e a descrição. Rode o
+   código: `gh pr checkout 42` traz a branch para a sua máquina.
+2. **Está correto?** Fronteiras (exatamente 4 MF?), valores ausentes, listas
+   vazias, erros da API.
+3. **Tem teste?** O teste falharia sem a mudança ([M11](../modulos/m11-testes.qmd))?
+4. **É seguro?** Segredos no diff, SQL montado com texto do usuário, HTML sem
+   escape, dados pessoais em logs ou prints ([M6](../modulos/m06-seguranca.qmd),
+   [M13](../modulos/m13-lgpd.qmd)).
+5. **Respeita a arquitetura?** Página chamando `requests` direto em vez do
+   `repositorio`; `apiCliente` chamando `st.*`; DataFrame do cache alterado
+   sem `.copy()` ([M7](../modulos/m07-streamlit.qmd)).
+6. **Desempenho**: consultas novas sem índice, mapas que mandam o estado
+   inteiro, cache sem prazo ([M10](../modulos/m10-desempenho-cache.qmd)).
+7. **Convenções e documentação**: nomes, comentários, README, diagramas.
+8. **Interface**: prints de antes e depois, contraste, celular ([guia de design](designers.qmd)).
+
+~~~exercicio
+id: revisao-diff
+tipo: multipla
+pergunta: |
+  Revise este trecho de um pull request para o miniserver. Que problemas
+  justificam pedir mudanças?
+
+  ```python
+  @app.get("/lotes_por_nome")
+  def lotes_por_nome(nome: str):
+      print(f"Conectando com {settings.postgres_dsn}")
+      sql = f"SELECT numero_lote, nome_proprietario FROM {settings.TABLE_DADOS_FUNDIARIOS} WHERE nome_proprietario = '{nome}'"
+      with get_engine().connect() as conn:
+          rows = conn.execute(text(sql)).mappings().all()
+      return [dict(r) for r in rows]
+  ```
+opcoes:
+  - texto: O valor de `nome` entra no SQL por f-string, abrindo injeção de SQL
+    correta: true
+  - texto: O endpoint não exige token (`Depends(verify_token)`)
+    correta: true
+  - texto: O `print` escreve no log o DSN, que contém a senha do banco
+    correta: true
+  - texto: A resposta devolve `nome_proprietario` sem a proteção da LGPD
+    correta: true
+  - texto: O nome da tabela vem de `settings` por f-string
+    explicacao: Isso é aceitável. O nome da tabela vem da configuração, não do usuário, e parâmetros do banco não servem para nomes de tabela.
+explicacao: |
+  Quatro problemas graves em sete linhas: injeção, falta de autenticação,
+  segredo em log e dado pessoal exposto. E ainda faltaria um teste.
+~~~
+
+## Como comentar
+
+- **Seja específico**: aponte a linha e diga o que muda. "Isso pode quebrar"
+  não ajuda; "com `municipio=None` a linha 42 lança `AttributeError`" ajuda.
+- **Explique o porquê** e, se puder, sugira o código. O GitHub tem o botão de
+  *sugestão*, que a pessoa aceita com um clique.
+- **Diferencie o obrigatório do opcional.** Um prefixo no começo do
+  comentário deixa claro: `obrigatório:`, `sugestão:`, `dúvida:`, `detalhe:`.
+- **Comente o código, não a pessoa.** "Esta função faz duas coisas" em vez de
+  "você misturou tudo".
+- **Elogie o que está bom.** Reconhecer uma boa solução também ensina.
+
+~~~exercicio
+id: revisao-comentario
+tipo: escolha
+pergunta: Qual destes comentários de revisão é o mais útil?
+opcoes:
+  - texto: "obrigatório: `calcularEstatisticas` recebe `None` quando a API devolve 404 (`permitir404=True`), e `geojson.get` quebra na linha 31. Sugestão: `features = (geojson or {}).get(\"features\", [])`."
+    correta: true
+  - texto: "Isso aqui está estranho."
+    explicacao: Não diz o que está errado, onde, nem o que fazer.
+  - texto: "Você esqueceu de tratar o None, de novo."
+    explicacao: Aponta o problema, mas fala da pessoa e não diz onde nem como corrigir.
+explicacao: Bom comentário diz o tipo (obrigatório), o problema concreto, a causa e uma saída.
+~~~
+
+### O formato de achados
+
+Para revisões maiores, como a análise de um módulo inteiro, o projeto usa o
+formato do
+[`plano_melhoria_codigo.md`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md):
+
+| ID | Severidade | Achado | Onde | Situação |
+|---|---|---|---|---|
+| S2 | Alto | Valores da API entram em HTML sem escape | `mapa_assentamento.py:178-187` | corrigido |
+
+- **ID** com uma letra por categoria: S (segurança), B (bug), e assim por diante.
+- **Severidade**: crítico, alto, médio ou baixo, pelo dano possível.
+- **Onde**: arquivo e linha conferidos no código.
+- **Situação**: pendente, parcial ou corrigido, com o que falta.
+
+~~~exercicio
+id: revisao-severidade
+tipo: associar
+pergunta: Associe cada achado à severidade mais adequada.
+pares:
+  - termo: O segredo JWT real está dentro da imagem Docker publicada
+    definicao: Crítico
+  - termo: Uma página quebra com IndexError ao escolher certo município
+    definicao: Alto
+  - termo: Uma mensagem de erro mostra a URL interna do miniserver
+    definicao: Baixo
+  - termo: Uma variável sem uso deixada no código
+    definicao: Detalhe, sem severidade
+explicacao: Severidade mede o dano possível. Segredo vazado compromete tudo; um erro numa página derruba uma funcionalidade; informação interna exposta ajuda um atacante; código morto só atrapalha a leitura.
+~~~
+
+## Aprovar, comentar ou pedir mudanças
+
+| Ação | Quando |
+|---|---|
+| **Approve** | está pronto; comentários restantes são opcionais |
+| **Comment** | dúvidas ou sugestões, sem bloquear |
+| **Request changes** | há pelo menos um ponto obrigatório |
+
+```bash
+gh pr checkout 42                       # roda a branch localmente
+gh pr review 42 --approve
+gh pr review 42 --request-changes --body "Dois pontos obrigatórios nos comentários."
+```
+
+## Recebendo uma revisão
+
+- Responda a **todos** os comentários, nem que seja com "feito".
+- Corrija em commits novos na mesma branch e peça uma nova revisão.
+- Não leve para o lado pessoal: a revisão é sobre o código, e todo mundo é revisado.
+- Discorde com argumentos e, se a conversa empacar, chame uma terceira pessoa
+  ou leve para a reunião da equipe.
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Code review, Dicionário do Programador](https://www.youtube.com/watch?v=_7W9pqWPyfc). Código Fonte TV, 14 min, português.
+- [Leitura]{.selo} [Google Engineering Practices: code review](https://google.github.io/eng-practices/review/). Inglês.
+- [Leitura]{.selo} [Conventional Comments](https://conventionalcomments.org/). Prefixos para comentários de revisão, inglês.
+- [Documentação]{.selo} [Sobre revisões de pull request](https://docs.github.com/pt/pull-requests/collaborating-with-pull-requests/reviewing-changes-in-pull-requests/about-pull-request-reviews). GitHub Docs, português.
+:::

@@ -1,0 +1,32 @@
+/* Tema escuro do Treinamento Terra Digital: as mesmas variáveis do terra.scss,
+ * com cores clareadas para manter o contraste sobre fundo escuro. */
+
+/*-- scss:defaults --*/
+
+$web-font-path: "https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&family=Raleway:ital,wght@0,400;0,600;0,700;1,400&display=swap";
+
+$terra-verde: #2f9e66;
+$terra-verde-claro: #6fd3a2;
+$terra-areia: #e1b87e;
+$terra-fundo-ficha: #2b2a26;
+
+$primary: $terra-verde;
+$link-color: $terra-verde-claro;
+
+$font-family-sans-serif: "Raleway", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+$headings-font-family: "Kanit", "Raleway", system-ui, sans-serif;
+$headings-font-weight: 500;
+
+$navbar-bg: #0e3b24;
+$navbar-fg: #ffffff;
+$code-color: #f0b98d;
+$code-bg: #2e2c28;
+
+/*-- scss:rules --*/
+
+:root {
+  --terra-destaque: #{$terra-verde-claro};
+  --terra-destaque-texto: #{$terra-verde-claro};
+  --terra-acento: #{$terra-areia};
+  --terra-fundo-suave: #{$terra-fundo-ficha};
+}

@@ -1,0 +1,426 @@
+---
+title: "M7 · Aplicações de dados com Streamlit"
+subtitle: "O modelo de execução, o cache e a arquitetura do dashboard"
+---
+
+::: {.ficha-modulo}
+**Duração:** 8 a 10 horas · **Obrigatório para:** dados e painéis, design · **Recomendado para:** backend · **Pré-requisitos:** [M2](m02-python-dados.qmd), [M5](m05-fastapi.qmd)
+:::
+
+::: {.callout-note appearance="simple"}
+## Por que isso importa no Terra.Ce
+O dashboard é uma aplicação Streamlit. O Streamlit é simples de
+começar e fácil de usar errado: dois bugs graves da versão anterior vinham do
+cache. Num, os dados nunca se atualizavam sem reiniciar o container (B7); no
+outro, uma sessão alterava os dados de todas as outras (B8).
+:::
+
+## Objetivos
+
+- Explicar o que acontece a cada clique numa aplicação Streamlit.
+- Usar `st.session_state` e chaves de widget.
+- Escolher entre `st.cache_data` e `st.cache_resource`.
+- Acrescentar uma página ao dashboard seguindo a arquitetura do projeto.
+- Testar páginas com `AppTest`.
+
+## 1. O script roda inteiro a cada interação
+
+Numa aplicação Streamlit, o arquivo Python é **executado de cima a baixo** sempre
+que alguém mexe num widget. Não há "callback de botão" no sentido tradicional:
+o clique faz o script rodar de novo, e desta vez a função do botão devolve
+`True`.
+
+```python
+import streamlit as st
+
+municipio = st.selectbox("Município", ["Crato", "Russas"])   # devolve a escolha atual
+if st.button("Calcular"):                                     # True só na execução do clique
+    st.write(f"Calculando para {municipio}...")
+```
+
+Consequências práticas:
+
+- tudo o que é caro (chamar a API, montar um DataFrame grande) **precisa de
+  cache**, senão roda de novo a cada clique;
+- variáveis comuns somem entre execuções. O que precisa sobreviver vai para
+  `st.session_state`, um dicionário por sessão do navegador.
+
+~~~exercicio
+id: m07-reexecucao
+tipo: escolha
+pergunta: Uma pessoa troca o município num `st.selectbox` do dashboard. O que o Streamlit faz?
+opcoes:
+  - texto: Executa o script da página inteiro de novo, do começo ao fim
+    correta: true
+  - texto: Executa só as linhas que dependem do `selectbox`
+    explicacao: O Streamlit não analisa dependências entre linhas. Ele reexecuta tudo.
+  - texto: Recarrega a página no navegador
+    explicacao: A página não recarrega. O servidor reexecuta o script e manda só as diferenças pela conexão WebSocket.
+explicacao: Por isso o cache é tão importante no dashboard. Sem ele, cada clique chamaria o miniserver de novo.
+~~~
+
+## 2. Estado da sessão e chaves
+
+O menu lateral do dashboard guarda a página atual em `st.session_state`
+([`navegacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/navegacao.py#L53-L82)):
+
+```python
+CHAVE_SESSAO = "paginaAtual"
+
+def obterPaginaAtual() -> Pagina:
+    chave = st.session_state.setdefault(CHAVE_SESSAO, PAGINAS[0].chave)
+    return PAGINAS_POR_CHAVE.get(chave, PAGINAS[0])
+
+def renderizarMenu(paginaAtual: Pagina) -> None:
+    with st.sidebar:
+        for pagina in PAGINAS:
+            st.button(pagina.rotulo, icon=pagina.icone,
+                      key=f"menu-{pagina.chave}",
+                      on_click=_selecionar, args=(pagina.chave,))
+```
+
+- O `on_click` roda **antes** da reexecução, então a página nova já aparece
+  no mesmo clique.
+- A `key` dá a cada botão uma identidade estável. O Streamlit põe a classe
+  `st-key-menu-<chave>` no contêiner do botão, e o CSS do menu usa essa classe
+  para destacar a página ativa, sem JavaScript.
+
+## 3. A arquitetura do dashboard
+
+```{mermaid}
+%%| fig-cap: "As camadas do dashboard: só as páginas falam com o Streamlit sobre o que mostrar."
+flowchart TB
+    app["app.py<br/>configura a página e chama a ativa"] --> nav["navegacao.py<br/>PAGINAS e menu"]
+    nav --> pag["pagina*.py<br/>uma página por módulo"]
+    pag --> ui["componentesUi.py<br/>camadasMapa.py, basemap.py"]
+    pag --> repo["repositorio.py<br/>uma função com cache por endpoint"]
+    repo --> api["apiCliente.py<br/>HTTP, token e ErroApi"]
+    api --> mini[("miniserver")]
+    pag --> regras["classificacao.py<br/>privacidade.py"]
+```
+
+O [`app.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/app.py)
+tem 23 linhas. Antes da reorganização de setembro de 2026, tinha 1.422, das
+quais 713 comentadas. Hoje ele só
+configura a página, aplica o CSS, monta o menu e chama a página ativa.
+
+Três regras sustentam essa divisão:
+
+1. **`apiCliente` não chama nenhuma função `st.*`.** Ele lança `ErroApi`, e
+   quem decide o que mostrar é a página, com `mostrarErroDados()`. Assim o
+   cliente pode ser testado sem Streamlit, e a pessoa nunca vê a URL interna
+   do miniserver numa mensagem de erro (achado S6).
+2. **`repositorio` é o único lugar com cache de dados.** Cada endpoint tem uma
+   função `carregar...` com o cache certo.
+3. **Regras de negócio ficam em módulos sem interface**, como
+   `classificacao.py` e funções puras dentro das páginas
+   (`calcularEstatisticas`, `filtrarPorTipo`). Elas são testadas sem abrir o
+   navegador.
+
+~~~exercicio
+id: m07-funcao-pura
+tipo: python
+pergunta: |
+  A página de assentamentos separa o cálculo das estatísticas da interface.
+  Complete `calcularEstatisticas(geojson)`: total de assentamentos, área total
+  e área média (com 2 casas), ignorando áreas ausentes ou inválidas.
+inicial: |
+  import math
+
+  def calcularEstatisticas(geojson):
+      features = (geojson or {}).get("features", [])
+      return {"totalAssentamentos": 0, "areaTotal": 0, "areaMedia": 0}
+
+  exemplo = {"features": [
+      {"properties": {"area": 100.0}},
+      {"properties": {"area": "250.5"}},
+      {"properties": {"area": None}},
+  ]}
+  print(calcularEstatisticas(exemplo))
+solucao: |
+  import math
+
+  def calcularEstatisticas(geojson):
+      features = (geojson or {}).get("features", [])
+      areas = []
+      for feature in features:
+          try:
+              area = float(feature.get("properties", {}).get("area"))
+          except (TypeError, ValueError):
+              continue
+          if not math.isnan(area):
+              areas.append(area)
+      return {
+          "totalAssentamentos": len(features),
+          "areaTotal": round(sum(areas), 2) if areas else 0,
+          "areaMedia": round(sum(areas) / len(areas), 2) if areas else 0,
+      }
+
+  exemplo = {"features": [
+      {"properties": {"area": 100.0}},
+      {"properties": {"area": "250.5"}},
+      {"properties": {"area": None}},
+  ]}
+  print(calcularEstatisticas(exemplo))
+testes:
+  - nome: conta todos os assentamentos, inclusive os sem área
+    codigo: |
+      assert calcularEstatisticas(exemplo)["totalAssentamentos"] == 3, calcularEstatisticas(exemplo)
+  - nome: soma e média ignoram a área ausente
+    codigo: |
+      r = calcularEstatisticas(exemplo)
+      assert r["areaTotal"] == 350.5 and r["areaMedia"] == 175.25, r
+  - nome: GeoJSON vazio ou None não quebra
+    codigo: |
+      assert calcularEstatisticas(None) == {"totalAssentamentos": 0, "areaTotal": 0, "areaMedia": 0}
+  - nome: área "nan" é ignorada
+    codigo: |
+      r = calcularEstatisticas({"features": [{"properties": {"area": "nan"}}, {"properties": {"area": 10}}]})
+      assert r["areaTotal"] == 10 and r["areaMedia"] == 10, r
+explicacao: |
+  É o código de [`paginaAssentamentos.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/paginaAssentamentos.py#L27-L43).
+  Por não depender do Streamlit, ele tem teste próprio em `tests/test_paginaAssentamentos.py`.
+~~~
+
+## 4. Cache: `cache_data` ou `cache_resource`
+
+| | `st.cache_data` | `st.cache_resource` |
+|---|---|---|
+| O que devolve | uma **cópia** do valor guardado a cada chamada | o **mesmo objeto** para todas as sessões |
+| Bom para | respostas JSON, listas, DataFrames pequenos | DataFrames grandes, conexões, modelos |
+| Risco | custo de copiar dados grandes | uma sessão alterar o objeto de todas |
+| No dashboard | `carregarRegioes`, `carregarGeojsonLotes` | `carregarLotes`, `carregarLimitesMunicipaisGdf` |
+
+Outras regras do cache que aparecem no
+[`repositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py):
+
+- `ttl=config.TTL_DADOS` (24 horas): a entrada expira e a próxima chamada busca de novo;
+- os **argumentos** da função formam a chave do cache. Um argumento cujo nome
+  começa com `_` (como `_lotes`) **fica fora da chave**: o Streamlit não
+  tenta calcular o hash de um DataFrame enorme. Por isso
+  `_classificarLotes(versao, _lotes)` recebe também a `versao`, que entra na chave;
+- `max_entries=2` limita quantas variações ficam guardadas;
+- `.clear()` esvazia o cache de uma função. O repositório usa isso quando o
+  miniserver anuncia uma carga nova ([M10](m10-desempenho-cache.qmd)).
+
+O bug **B7** mostra por que o TTL de cada função importa: uma função
+`load_once` com `cache_resource` **sem TTL** envolvia todas as cargas, e os
+TTLs internos nunca tinham efeito. Os dados só mudavam quando o container
+reiniciava.
+
+~~~exercicio
+id: m07-cache-pares
+tipo: associar
+pergunta: Associe cada característica ao recurso do cache.
+pares:
+  - termo: "`st.cache_data`"
+    definicao: Devolve uma cópia nova a cada chamada
+  - termo: "`st.cache_resource`"
+    definicao: Devolve o mesmo objeto para todas as sessões
+  - termo: Argumento `_lotes`
+    definicao: Fica fora da chave do cache
+  - termo: "`ttl=`"
+    definicao: Tempo até a entrada guardada expirar
+  - termo: "`.clear()`"
+    definicao: Descarta tudo o que a função guardou
+explicacao: Quem altera o resultado de uma função com `cache_resource` altera para todo mundo. Faça `.copy()`.
+~~~
+
+~~~exercicio
+id: m07-cache-ttl
+tipo: python
+pergunta: |
+  Para entender o mecanismo, implemente um cache simples com validade.
+  `cacheComValidade(segundos, relogio)` devolve um decorador que guarda o
+  resultado por argumento e só recalcula quando passar o tempo. `relogio` é
+  uma função que devolve o tempo atual (nos testes, um relógio falso).
+inicial: |
+  import time
+
+  def cacheComValidade(segundos, relogio=time.monotonic):
+      def decorador(funcao):
+          def envoltorio(*args):
+              return funcao(*args)   # sem cache nenhum ainda
+          return envoltorio
+      return decorador
+solucao: |
+  import time
+
+  def cacheComValidade(segundos, relogio=time.monotonic):
+      def decorador(funcao):
+          guardados = {}
+          def envoltorio(*args):
+              agora = relogio()
+              if args in guardados:
+                  valor, guardadoEm = guardados[args]
+                  if agora - guardadoEm < segundos:
+                      return valor
+              valor = funcao(*args)
+              guardados[args] = (valor, agora)
+              return valor
+          envoltorio.clear = guardados.clear
+          return envoltorio
+      return decorador
+testes:
+  - nome: a segunda chamada dentro do prazo usa o cache
+    codigo: |
+      agora = [0]
+      chamadas = []
+      @cacheComValidade(60, relogio=lambda: agora[0])
+      def carregarRegioes():
+          chamadas.append(1)
+          return ["Cariri"]
+      carregarRegioes(); agora[0] = 30; carregarRegioes()
+      assert len(chamadas) == 1, f"a função rodou {len(chamadas)} vezes"
+  - nome: depois do prazo, recalcula
+    codigo: |
+      agora[0] = 90
+      carregarRegioes()
+      assert len(chamadas) == 2, f"a função rodou {len(chamadas)} vezes"
+  - nome: argumentos diferentes têm entradas diferentes
+    codigo: |
+      vistos = []
+      @cacheComValidade(60, relogio=lambda: 0)
+      def municipios(regiao):
+          vistos.append(regiao)
+          return regiao.upper()
+      municipios("cariri"); municipios("cariri"); municipios("sertao")
+      assert vistos == ["cariri", "sertao"], vistos
+explicacao: |
+  `st.cache_data(ttl=...)` faz isso e mais: copia o valor, guarda em disco se
+  pedido e funciona entre sessões. O miniserver tem uma variação com
+  `lru_cache` e uma "janela" de tempo na chave ([M10](m10-desempenho-cache.qmd)).
+~~~
+
+~~~exercicio
+id: m07-mutacao
+tipo: escolha
+pergunta: |
+  `carregarLotes()` usa `st.cache_resource`. Uma página faz
+  `df = carregarLotes()` e depois `df["area"] = df["area"] / 100` para mostrar
+  em km². O que acontece?
+opcoes:
+  - texto: Todas as sessões passam a ver a área dividida por 100, e a cada visita à página ela é dividida de novo
+    correta: true
+  - texto: Só a sessão atual vê a área em km²
+    explicacao: "`cache_resource` devolve o mesmo objeto a todas as sessões. A alteração é global."
+  - texto: O Streamlit lança um erro por alterar um valor em cache
+    explicacao: Não há proteção automática para `cache_resource`. Por isso a regra do projeto é tratar como somente leitura.
+explicacao: Foi o bug B8. A correção é `df = carregarLotes().copy()` antes de alterar.
+~~~
+
+## 5. Configuração
+
+O [`.streamlit/config.toml`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/.streamlit/config.toml)
+define o servidor e o tema:
+
+- `baseUrlPath = "paineis"`: o dashboard responde em `/paineis`, atrás do
+  proxy de `terrace.virtual.ufc.br`. O healthcheck da imagem consulta
+  `/paineis/_stcore/health`;
+- `maxMessageSize = 300`: o limite de uma mensagem para o navegador, alto por
+  causa dos mapas grandes;
+- `[theme]`: cores e fonte, inclusive o verde `#008241` que este site também usa;
+- `runOnSave = true` no desenvolvimento, desligado na imagem pela variável
+  `STREAMLIT_SERVER_RUN_ON_SAVE=false`. Toda opção do `config.toml` pode ser
+  trocada por uma variável `STREAMLIT_<SEÇÃO>_<OPÇÃO>`.
+
+~~~exercicio
+id: m07-baseurl
+tipo: texto
+pergunta: Em que caminho do servidor o dashboard responde, segundo o `baseUrlPath`?
+respostas:
+  - paineis
+  - /paineis
+  - /paineis/
+explicacao: "`/paineis`. Esquecer isso é a causa clássica de um healthcheck que falha atrás do proxy."
+~~~
+
+## 6. Testar páginas com `AppTest`
+
+O `streamlit.testing.v1.AppTest` roda o script sem navegador e permite
+inspecionar o que seria mostrado. O teste de fumaça do dashboard
+([`test_appFumaca.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/test_appFumaca.py))
+abre cada página da lista `PAGINAS` com o miniserver simulado:
+
+```python
+@pytest.mark.parametrize("pagina", [p.chave for p in navegacao.PAGINAS])
+def test_paginaRenderizaSemExcecao(miniserverSimulado, pagina):
+    at = AppTest.from_file("app.py", default_timeout=60)
+    at.session_state[navegacao.CHAVE_SESSAO] = pagina
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+```
+
+Como o teste percorre `PAGINAS`, uma página nova registrada ali já ganha o
+seu teste de fumaça sem escrever nada.
+
+~~~exercicio
+id: m07-nova-pagina
+tipo: multipla
+pergunta: Você vai criar a página "Imóveis por região". O que precisa fazer?
+opcoes:
+  - texto: Criar `modules/paginaImoveisRegiao.py` com uma função `renderizar()`
+    correta: true
+  - texto: Acrescentar um `Pagina(...)` à lista `PAGINAS` em `navegacao.py`
+    correta: true
+  - texto: Escrever um teste novo que abra a página com `AppTest`
+    explicacao: O teste de fumaça já percorre `PAGINAS`. Testes das funções de cálculo da página, esses sim, são bem-vindos.
+  - texto: Usar nomes em camelCase, como `paginaImoveisRegiao`
+    correta: true
+  - texto: Chamar a API diretamente com `requests` dentro da página
+    explicacao: Os dados vêm do `repositorio`, que tem o cache e trata os erros.
+explicacao: Arquivo, registro em `PAGINAS` e convenção de nomes. O `tests/test_convencaoNomes.py` reprova nomes fora do padrão.
+~~~
+
+~~~exercicio
+id: m07-b7
+tipo: aberta
+pergunta: |
+  No bug B7, os dados do dashboard só se atualizavam quando o container
+  reiniciava, embora cada função de carga tivesse `ttl`. Explique a causa e
+  como a arquitetura atual evita o problema.
+resposta: |
+  - Causa: uma função `load_once`, com `st.cache_resource` sem TTL, chamava
+    todas as funções de carga e guardava o resultado. Como ela nunca
+    expirava, as funções internas nunca eram chamadas de novo, e os TTLs
+    delas não tinham efeito.
+  - Hoje cada página chama diretamente as funções do `repositorio`, cada uma
+    com o seu TTL de 24 horas, e não existe um cache "por cima" de tudo.
+  - Além disso, a checagem de `/versao_dados` limpa os caches quando chega
+    uma carga nova, sem esperar o TTL.
+~~~
+
+## No código
+
+- [`app.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/app.py): o ponto de entrada.
+- [`modules/navegacao.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/navegacao.py): páginas e menu.
+- [`modules/repositorio.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/repositorio.py): cache por endpoint.
+- [`modules/componentesUi.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/modules/componentesUi.py): título, avisos e mensagem de erro.
+- [`tests/test_appFumaca.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/test_appFumaca.py) e [`tests/conftest.py`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/tests/conftest.py): o miniserver simulado.
+
+## Prática no projeto
+
+~~~exercicio
+id: m07-pratica
+tipo: checklist
+pergunta: No dashboard, numa branch de estudo.
+itens:
+  - "Rodei o dashboard com `streamlit run app.py` (com `JWT_SECRET` local e o miniserver do M5) e abri `http://localhost:8501/paineis`."
+  - Num app de brinquedo, reproduzi o vazamento entre sessões do B8 com duas abas do navegador e corrigi com `.copy()`.
+  - Criei a página "Imóveis por região" (tabela e gráfico de barras) e registrei em `PAGINAS`.
+  - Rodei `python -m pytest -q` e vi o teste de fumaça cobrir a página nova.
+  - "Rodei `ruff check .` sem avisos."
+~~~
+
+## Para aprofundar
+
+::: {.recursos}
+- [Vídeo]{.selo} [Streamlit em menos de 10 minutos](https://www.youtube.com/watch?v=zxA97KcUm1Q). Asimov Academy, 6 min, português.
+- [Vídeo]{.selo} [Curso de Streamlit, aula 1: como funciona](https://www.youtube.com/watch?v=NsjA-c8596k). Hashtag Programação, 27 min, português.
+- [Vídeo]{.selo} [Streamlit Tutorial: Caching (st.cache_data, st.cache_resource)](https://www.youtube.com/watch?v=LkK1RwOm0_c). Datum Learning, 14 min, inglês.
+- [Documentação]{.selo} [Conceitos do Streamlit](https://docs.streamlit.io/develop/concepts). Inglês.
+- [Documentação]{.selo} [Caching overview](https://docs.streamlit.io/develop/concepts/architecture/caching). Inglês.
+- [Documentação]{.selo} [Session State](https://docs.streamlit.io/develop/concepts/architecture/session-state). Inglês.
+- [Documentação]{.selo} [App testing](https://docs.streamlit.io/develop/concepts/app-testing). Inglês.
+- [Documentação]{.selo} [config.toml](https://docs.streamlit.io/develop/api-reference/configuration/config.toml). Inglês.
+:::

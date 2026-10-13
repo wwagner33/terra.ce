@@ -1,0 +1,14 @@
+# Saídas do Quarto
+_site/
+.quarto/
+/.luarc.json
+
+# Gerado antes de cada render por ferramentas/exercicios.py
+indiceExercicios.js
+
+# Ambiente Python local
+.venv/
+__pycache__/
+
+/.quarto/
+**/*.quarto_ipynb
