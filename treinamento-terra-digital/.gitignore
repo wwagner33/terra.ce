@@ -6,6 +6,9 @@ _site/
 # Gerado antes de cada render por ferramentas/exercicios.py
 indiceExercicios.js
 
+# Gerado antes de cada render por ferramentas/dataPublicacao.py
+_variables.yml
+
 # Ambiente Python local
 .venv/
 __pycache__/
