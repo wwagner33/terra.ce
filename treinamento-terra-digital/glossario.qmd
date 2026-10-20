@@ -70,7 +70,7 @@ módulo onde é explicado.
 | **Lint** | Análise do código sem executá-lo, em busca de erros prováveis | [M12](modulos/m12-qualidade-documentacao.qmd) |
 | **Pull request** | Pedido para incorporar uma branch, com revisão e CI | [Manual](manual/fluxo-pull-request.qmd) |
 | **Pyodide** | Python compilado para rodar no navegador, usado nos exercícios | [Manual](manual/material-didatico.qmd) |
-| **Stack** | O conjunto de containers da produção, gerenciado pelo Portainer | [M14](modulos/m14-containers.qmd) |
+| **Stack** | O conjunto de containers que forma a plataforma (PostGIS, miniserver e dashboard), descrito num arquivo compose | [M14](modulos/m14-containers.qmd) |
 | **Streamlit** | Biblioteca Python para aplicações de dados, usada no dashboard | [M7](modulos/m07-streamlit.qmd) |
 | **Submódulo** | Repositório Git pendurado em outro, fixado num commit | [M1](modulos/m01-ambiente-git.qmd) |
 | **Tag** | Nome fixo para um commit (no Git) ou para uma versão de imagem (no Docker) | [M1](modulos/m01-ambiente-git.qmd), [M14](modulos/m14-containers.qmd) |

@@ -137,12 +137,13 @@
     html = html
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, "$1<em>$2</em>")
-      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (trecho, rotulo, endereco) =>
+      .replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (trecho, rotulo, endereco) => {
         // Só http(s) e caminhos relativos: nada de "javascript:" vindo do YAML.
-        /^(https?:\/\/|\.{0,2}\/|#)/.test(endereco) || !/^[a-z][a-z0-9+.-]*:/i.test(endereco)
-          ? '<a href="' + endereco + '" target="_blank" rel="noopener">' + rotulo + "</a>"
-          : rotulo
-      );
+        if (!/^(https?:\/\/|\.{0,2}\/|#)/.test(endereco) && /^[a-z][a-z0-9+.-]*:/i.test(endereco)) return rotulo;
+        // O Quarto converte .qmd em .html só no texto da página; os links do YAML chegam como foram escritos.
+        const destino = /^https?:\/\//.test(endereco) ? endereco : endereco.replace(/\.qmd(?=#|$)/, ".html");
+        return '<a href="' + destino + '" target="_blank" rel="noopener">' + rotulo + "</a>";
+      });
     return html.replace(/\u0000(\d+)\u0000/g, (_, i) => "<code>" + trechosDeCodigo[Number(i)] + "</code>");
   }
 
@@ -842,15 +843,17 @@
               renderizarInline(item) +
               "</span></label>"
           )
-          .join("");
+          .join("") + '<p class="exercicio-contagem" aria-live="polite"></p>';
         ex.corpo.querySelectorAll("input").forEach((entrada) =>
           entrada.addEventListener("change", () => {
             const estado = Array.from(ex.corpo.querySelectorAll("input")).map((e) => e.checked);
             progresso.gravarRascunho(ex.id, estado);
             progresso.definirConcluido(ex.id, estado.every(Boolean));
+            contarMarcados(ex);
             ex.atualizarSituacao();
           })
         );
+        contarMarcados(ex);
       },
       verificar() {
         return null;
@@ -862,10 +865,22 @@
         ex.corpo.querySelectorAll("input").forEach((entrada) => (entrada.checked = false));
         progresso.apagarRascunho(ex.id);
         progresso.definirConcluido(ex.id, false);
+        contarMarcados(ex);
         ex.atualizarSituacao();
       },
     },
   };
+
+  /** A prática guiada não tem botão de enviar: o contador diz o que falta para ela contar como concluída. */
+  function contarMarcados(ex) {
+    const entradas = Array.from(ex.corpo.querySelectorAll("input"));
+    const feitos = entradas.filter((e) => e.checked).length;
+    ex.corpo.querySelector(".exercicio-contagem").textContent =
+      feitos + " de " + entradas.length + " itens marcados" +
+      (feitos === entradas.length
+        ? ": prática concluída."
+        : ". Não há botão de enviar: cada marcação é salva na hora, e a prática conta como concluída quando todos os itens estiverem marcados.");
+  }
 
   // ------------------------------------------------------------- exercício
 

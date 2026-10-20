@@ -370,8 +370,8 @@ resposta: |
   - **Responsabilidade**: coletar da GeoAPI, ler os CSVs, transformar,
     carregar e registrar em `carga_dados`. O miniserver deixa de ter os
     importadores.
-  - **Agendamento**: um container próprio na stack, disparado por cron (ou
-    agendador do Portainer) uma vez por mês, e também sob demanda.
+  - **Agendamento**: um container próprio na stack, disparado por um
+    agendador (cron) uma vez por mês, e também sob demanda.
   - **Aviso**: nenhum aviso direto é necessário. A carga grava em
     `carga_dados`, o `/versao_dados` muda e o dashboard limpa o cache sozinho.
     O cache de listas do miniserver expira em 10 minutos.

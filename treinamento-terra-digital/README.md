@@ -44,11 +44,11 @@ Actions*.
 |---|---|
 | `index.qmd`, `comece/`, `progresso.qmd` | página inicial, como estudar, cronograma e progresso |
 | `modulos/` | os módulos M0 a M15 |
-| `manual/` | manual de contribuição: pull request, design, revisão, publicação e edição do material |
+| `manual/` | manual de contribuição: pull request, design, revisão e edição do material |
 | `projeto-integrador.qmd`, `glossario.qmd`, `referencias.qmd` | fechamento do treinamento |
 | `estilos/` | tema claro, tema escuro e layout comum |
 | `_extensions/exercicios/` | o motor dos exercícios autocorrigidos |
-| `ferramentas/` | índice, validação e teste dos exercícios; gerador do banco sintético; verificador de links |
+| `ferramentas/` | índice, validação e teste dos exercícios; gerador do banco sintético; anonimização dos CSVs do miniserver; verificador de links |
 | `rodar.sh` | abre, testa, constrói e serve o site na sua máquina |
 
 O guia completo de autoria, com o formato de cada tipo de exercício, está em

@@ -380,8 +380,7 @@ explicacao: É uma troca consciente entre rapidez e fidelidade. O [M11](m11-test
 | Restaurar | `pg_restore -U terra -d geodata --clean geodata.dump` |
 | Trocar a senha de um usuário | `ALTER USER terra WITH PASSWORD '...';` |
 
-Dois cuidados registrados no
-[roteiro de implantação](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md):
+Dois cuidados com o banco:
 
 - `POSTGRES_PASSWORD` só vale na **criação** do banco. Com o volume já
   criado, a troca de senha é por SQL (`ALTER USER`).
@@ -398,7 +397,7 @@ respostas:
   - "-F c"
   - "--format=custom"
   - "--format=c"
-explicacao: "`-Fc` (formato *custom*). O roteiro de implantação usa `pg_dump -Fc` antes de mexer na stack."
+explicacao: "`-Fc` (formato *custom*). É o formato do backup que você faz na prática deste módulo e antes de trocar a versão da stack no [M14](m14-containers.qmd)."
 ~~~
 
 ## No código
@@ -406,18 +405,17 @@ explicacao: "`-Fc` (formato *custom*). O roteiro de implantação usa `pg_dump -
 - [`importer_all.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/importer_all.py): criação de tabelas, índices, transações e `registrar_carga`.
 - [`data_service/main.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/main.py): as consultas de cada endpoint.
 - [`data_service/db.py`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/data_service/db.py): a conexão com PostgreSQL ou SQLite com SpatiaLite.
-- [`IMPLANTACAO_PORTAINER.md`](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md): backup, volumes e versão do PostGIS.
 
 ## Prática no projeto
 
 ~~~exercicio
 id: m04-pratica
 tipo: checklist
-pergunta: Com o PostGIS local e os CSVs (peça à coordenação).
+pergunta: Com o PostGIS local e os CSVs anonimizados (peça à coordenação).
 itens:
   - "Subi um PostGIS local: `podman run -d --name pg-estudo -e POSTGRES_PASSWORD=estudo -p 127.0.0.1:5433:5432 docker.io/postgis/postgis:17-3.5`."
   - "Carreguei os CSVs com `importer_all.py`, passando `DATABASE_TYPE=postgres POSTGRES_HOST=localhost POSTGRES_PORT=5433 POSTGRES_USER=postgres POSTGRES_PASSWORD=estudo POSTGRES_DB=postgres JWT_SECRET=segredo-local`."
-  - Escrevi as consultas de quantidade de imóveis e área por região e da classificação por módulo fiscal na base real.
+  - Escrevi as consultas de quantidade de imóveis e área por região e da classificação por módulo fiscal na base carregada.
   - "Comparei `ST_Area(geometry_31984) / 10000` com a coluna `area` e investiguei as maiores diferenças."
   - "Rodei `EXPLAIN ANALYZE` de uma busca por `nome_municipio` com e sem o índice, e com `ILIKE`."
   - Fiz um `pg_dump -Fc`, apaguei o banco e restaurei com `pg_restore`.

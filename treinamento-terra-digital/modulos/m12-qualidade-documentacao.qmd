@@ -263,7 +263,7 @@ pull request:
 | Documento | Para quê | Exemplo |
 |---|---|---|
 | README | instalar, configurar e entender a estrutura | `dashboard_fundiario_ceara/README.md` |
-| Roteiro de operação | passos exatos para uma tarefa arriscada | `IMPLANTACAO_PORTAINER.md`, `doc/rotacao_segredos.md` |
+| Roteiro de operação | passos exatos para uma tarefa arriscada | `doc/rotacao_segredos.md` |
 | Requisitos | o que o sistema deve fazer | as *user stories* RF01 a RF04 no README |
 | Diagramas PlantUML | arquitetura, casos de uso, atividades, classes | `doc/*.puml` |
 | Contrato da API | endpoints, parâmetros e respostas | `doc/spec.yaml` (OpenAPI) e `/openapi.json` |

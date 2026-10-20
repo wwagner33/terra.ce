@@ -1,6 +1,6 @@
 ---
 title: "M14 · Containers e implantação"
-subtitle: "Imagens, compose, Portainer e como atualizar e reverter sem perder dados"
+subtitle: "Imagens, compose e como atualizar e reverter a stack sem perder dados"
 ---
 
 ::: {.ficha-modulo}
@@ -9,20 +9,22 @@ subtitle: "Imagens, compose, Portainer e como atualizar e reverter sem perder da
 
 ::: {.callout-note appearance="simple"}
 ## Por que isso importa no Terra.Ce
-Em produção, a plataforma são três containers numa stack do Portainer: o
-PostGIS, o miniserver e o dashboard. Três dos achados mais sérios do projeto
-eram de containers: segredos dentro da imagem, a carga que duplicava dados a
-cada reinício e um `postgis:latest` que podia trocar a versão do banco sem
-aviso. Quem publica uma versão precisa entender cada linha do Dockerfile e do
-compose.
+A plataforma roda em três containers: o PostGIS, o miniserver e o dashboard.
+Três dos achados mais sérios do projeto eram de containers: segredos dentro da
+imagem, a carga que duplicava dados a cada reinício e um `postgis:latest` que
+podia trocar a versão do banco sem aviso. Quem mexe num Dockerfile ou no
+compose precisa entender cada linha deles.
+
+A implantação em produção é feita só pela coordenação e não faz parte deste
+módulo: aqui, tudo roda em containers na sua máquina.
 :::
 
 ## Objetivos
 
 - Explicar imagem, container, camada, registro e tag.
 - Ler e melhorar os Dockerfiles do projeto.
-- Entender o `docker-compose.stack.yml` da produção.
-- Atualizar e reverter a stack com segurança, sem perder o banco.
+- Entender o `docker-compose.stack.yml` e subir a stack na sua máquina.
+- Atualizar e reverter a stack local com segurança, sem perder o banco.
 
 ## 1. Conceitos
 
@@ -31,12 +33,11 @@ compose.
 | **Imagem** | pacote somente leitura com sistema, bibliotecas e código | `wellingtonwfsarmento/dashboard-fundiario-ceara:1.2.0` |
 | **Camada** | cada instrução do Dockerfile gera uma; a imagem é a pilha delas | `RUN pip install` é a camada mais pesada |
 | **Container** | uma imagem em execução, com uma camada gravável por cima | `dashboard_fundiario_ce` |
-| **Registro** | onde as imagens são publicadas | Docker Hub |
+| **Registro** | onde as imagens são publicadas (só a coordenação publica) | Docker Hub |
 | **Tag** | o nome de uma versão da imagem | `1.2.0`, `latest` |
 | **Volume** | armazenamento que sobrevive ao container | os dados do Postgres |
 
-O projeto usa o **Podman** nas máquinas de desenvolvimento (os scripts
-`publish-docker.sh` chamam `podman build --format docker`) e o **Docker** no
+O projeto usa o **Podman** nas máquinas de desenvolvimento e o **Docker** no
 servidor. Os dois leem o mesmo Dockerfile e o mesmo compose; o Podman roda sem
 um serviço em segundo plano e, por padrão, sem root.
 
@@ -72,7 +73,7 @@ ENTRYPOINT ["streamlit", "run", "app.py"]           # <7>
 3. Só o necessário, e o cache do apt apagado na mesma camada para não pesar na imagem.
 4. As dependências vêm **antes** do código. Mudou só o código? O build reaproveita a camada do `pip install`.
 5. O processo roda como o usuário `terra`, sem privilégios de root.
-6. O Docker pergunta periodicamente se a aplicação está viva; o Portainer mostra *healthy* ou *unhealthy*.
+6. O Docker pergunta periodicamente se a aplicação está viva; a lista de containers (`podman ps`) mostra *healthy* ou *unhealthy*.
 7. Forma *exec* (lista JSON): o Streamlit é o processo principal e recebe os sinais de parada.
 
 ~~~exercicio
@@ -122,9 +123,9 @@ imagem.
 
 ::: {.callout-warning}
 ## Um segredo que entrou numa imagem publicada
-1. Corrija o `.dockerignore` e publique uma imagem nova.
-2. **Troque o segredo**: a imagem antiga continua existindo em quem a baixou.
-3. Remova as tags antigas do registro.
+Avise a coordenação na hora. Corrigir o `.dockerignore` não basta: a imagem
+antiga continua existindo em quem a baixou. A coordenação **troca o segredo**,
+publica uma imagem corrigida e remove as tags antigas do registro.
 :::
 
 ## 4. O `entrypoint.sh` do miniserver
@@ -156,10 +157,11 @@ opcoes:
 explicacao: "`exec` troca o shell pelo Gunicorn, que passa a ser o PID 1 e encerra os workers com calma ao receber o SIGTERM."
 ~~~
 
-## 5. A stack de produção
+## 5. A stack no compose
 
 O [`docker-compose.stack.yml`](https://github.com/wwagner33/terra.ce/blob/main/docker-compose.stack.yml)
-do superprojeto descreve os três serviços. Os pontos que mais importam:
+do superprojeto descreve os três serviços. É o arquivo que você vai subir na
+sua máquina, na prática deste módulo. Os pontos que mais importam:
 
 ```yaml
 services:
@@ -198,6 +200,10 @@ networks:
   porque um volume criado por uma versão principal do Postgres não abre em
   outra.
 
+As variáveis vêm de um arquivo preenchido a partir do
+[`stack.env.example`](https://github.com/wwagner33/terra.ce/blob/main/stack.env.example).
+Na sua máquina, use sempre valores de estudo, nunca os de produção.
+
 ~~~exercicio
 id: m14-interpolacao
 tipo: associar
@@ -221,110 +227,36 @@ unidade: min
 explicacao: A carga dos CSVs roda antes do Gunicorn e leva de 2 a 5 minutos. Sem esse período de tolerância, o container seria marcado como *unhealthy* durante a carga.
 ~~~
 
-## 6. Variáveis no Portainer
+## 6. Atualizar e reverter
 
-As variáveis da stack são carregadas de um arquivo preenchido a partir do
-[`stack.env.example`](https://github.com/wwagner33/terra.ce/blob/main/stack.env.example).
-O Portainer **não trata aspas como delimitador**: `JWT_SECRET="abc"` vira um
-segredo de cinco caracteres, com as aspas. Esse erro já custou uma implantação
-inteira.
+Na stack, a versão de cada aplicação é a tag da imagem, definida nas
+variáveis `TGDM_TAG` e `DFUNDCE_TAG`. Na sua máquina, você ensaia as duas
+operações:
 
-~~~exercicio
-id: m14-aspas
-tipo: python
-pergunta: |
-  Escreva `conferirArquivoEnv(texto)`, que lê um arquivo de variáveis e
-  devolve a lista de problemas: variáveis com valor entre aspas (simples ou
-  duplas) e variáveis obrigatórias vazias. Ignore linhas vazias e comentários
-  (`#`).
-inicial: |
-  OBRIGATORIAS = {"POSTGIS_TAG", "POSTGRES_VOLUME", "POSTGRES_PASSWORD", "JWT_SECRET"}
-
-  def conferirArquivoEnv(texto):
-      problemas = []
-      return problemas
-
-  exemplo = """
-  # variáveis da stack
-  POSTGIS_TAG=17-3.5
-  POSTGRES_VOLUME=terrace_postgres_data
-  POSTGRES_PASSWORD="senha-de-estudo"
-  JWT_SECRET=
-  CARTO_API_KEY=
-  """
-  print(conferirArquivoEnv(exemplo))
-solucao: |
-  OBRIGATORIAS = {"POSTGIS_TAG", "POSTGRES_VOLUME", "POSTGRES_PASSWORD", "JWT_SECRET"}
-
-  def conferirArquivoEnv(texto):
-      problemas = []
-      for linha in texto.splitlines():
-          linha = linha.strip()
-          if not linha or linha.startswith("#") or "=" not in linha:
-              continue
-          nome, valor = linha.split("=", 1)
-          nome, valor = nome.strip(), valor.strip()
-          if len(valor) >= 2 and valor[0] == valor[-1] and valor[0] in "\"'":
-              problemas.append(f"{nome}: valor entre aspas")
-          if nome in OBRIGATORIAS and not valor:
-              problemas.append(f"{nome}: obrigatória e vazia")
-      return problemas
-
-  exemplo = """
-  # variáveis da stack
-  POSTGIS_TAG=17-3.5
-  POSTGRES_VOLUME=terrace_postgres_data
-  POSTGRES_PASSWORD="senha-de-estudo"
-  JWT_SECRET=
-  CARTO_API_KEY=
-  """
-  print(conferirArquivoEnv(exemplo))
-testes:
-  - nome: aponta o valor entre aspas
-    codigo: |
-      assert "POSTGRES_PASSWORD: valor entre aspas" in conferirArquivoEnv(exemplo), conferirArquivoEnv(exemplo)
-  - nome: aponta a obrigatória vazia, mas não a opcional
-    codigo: |
-      r = conferirArquivoEnv(exemplo)
-      assert "JWT_SECRET: obrigatória e vazia" in r and not any(p.startswith("CARTO_API_KEY") for p in r), r
-  - nome: aspas simples também contam
-    codigo: |
-      assert conferirArquivoEnv("JWT_SECRET='abc'") == ["JWT_SECRET: valor entre aspas"], conferirArquivoEnv("JWT_SECRET='abc'")
-  - nome: arquivo correto não tem problemas
-    codigo: |
-      assert conferirArquivoEnv("POSTGIS_TAG=17-3.5\nPOSTGRES_VOLUME=v\nPOSTGRES_PASSWORD=x\nJWT_SECRET=y\n# fim") == []
-explicacao: Um verificador assim pode rodar antes de cada implantação, e é um ótimo candidato a script em `scripts/` do superprojeto.
-~~~
-
-## 7. Atualizar e reverter
-
-O roteiro completo está em
-[`IMPLANTACAO_PORTAINER.md`](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md).
-
-~~~exercicio
-id: m14-roteiro
-tipo: ordenar
-pergunta: Ordene as etapas do roteiro de recriação da stack no Portainer.
-itens:
-  - Anotar versões, segredos e o nome do volume dos containers atuais
-  - Fazer o backup do banco com pg_dump
-  - Parar e remover os containers antigos, sem remover os volumes
-  - Criar a stack com o compose e o arquivo de variáveis
-  - Acompanhar os logs até a carga terminar e o Gunicorn iniciar
-  - Conferir as páginas, os mapas e a proteção dos nomes
-explicacao: O backup vem antes de qualquer parada. E a remoção é só dos containers; o volume tem os dados.
-~~~
-
-- **Atualizar**: trocar `TGDM_TAG` e `DFUNDCE_TAG` nas variáveis da stack e
-  usar *Update the stack* com *Re-pull image*. As duas imagens sobem juntas,
-  porque o contrato entre elas muda junto.
+- **Atualizar**: trocar `TGDM_TAG` e `DFUNDCE_TAG` no arquivo de variáveis e
+  recriar os containers com o compose. As duas imagens sobem juntas, porque o
+  contrato entre elas muda junto.
 - **Reverter**: voltar as tags para a versão anterior. O volume é compatível,
   mas cada versão tem as suas consequências.
 
 ~~~exercicio
+id: m14-atualizar-local
+tipo: ordenar
+pergunta: Ordene as etapas para trocar a versão da stack na sua máquina sem perder o banco.
+itens:
+  - Anotar as tags em uso e o nome do volume do Postgres
+  - Fazer o backup do banco com pg_dump
+  - Trocar as tags no arquivo de variáveis
+  - Recriar os containers com o compose, sem remover os volumes
+  - Acompanhar os logs até a carga terminar e o Gunicorn iniciar
+  - Conferir as páginas, os mapas e a proteção dos nomes
+explicacao: O backup vem antes de qualquer mudança. E só os containers são recriados; o volume tem os dados.
+~~~
+
+~~~exercicio
 id: m14-reverter
 tipo: aberta
-pergunta: A versão 1.2.0 apresentou um problema e alguém sugere voltar para `TGDM_TAG=1.1.0` e `DFUNDCE_TAG=1.1.1`. Que consequências você levantaria antes de reverter?
+pergunta: Imagine que a versão 1.2.0 apresentou um problema e alguém sugere voltar para `TGDM_TAG=1.1.0` e `DFUNDCE_TAG=1.1.1`. Que consequências você levaria à coordenação antes de reverter?
 resposta: |
   - O miniserver 1.1.0 **volta a duplicar** assentamentos, reservatórios e
     regiões a cada reinício (B10).
@@ -337,11 +269,11 @@ resposta: |
   - Alternativa melhor: corrigir o problema numa 1.2.1.
 ~~~
 
-## 8. Operação do dia a dia
+## 7. Operação do dia a dia
 
 | Tarefa | Comando |
 |---|---|
-| Ver os containers e o estado de saúde | `podman ps` (ou a lista de containers no Portainer) |
+| Ver os containers e o estado de saúde | `podman ps` |
 | Acompanhar os logs | `podman logs -f terra_geodata_mini_server` |
 | Entrar num container | `podman exec -it terra_postgis bash` |
 | Construir uma imagem local | `podman build -f Dockerfile.dfundce -t dfundce:estudo .` |
@@ -351,8 +283,7 @@ resposta: |
 
 - [`Dockerfile.dfundce`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/Dockerfile.dfundce) e [`Dockerfile.tgdmserver`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/Dockerfile.tgdmserver).
 - [`entrypoint.sh`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/entrypoint.sh) e [`.dockerignore` do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/.dockerignore).
-- [`docker-compose.stack.yml`](https://github.com/wwagner33/terra.ce/blob/main/docker-compose.stack.yml), [`stack.env.example`](https://github.com/wwagner33/terra.ce/blob/main/stack.env.example) e [`IMPLANTACAO_PORTAINER.md`](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md), no superprojeto.
-- [`publish-docker.sh` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/publish-docker.sh): build e publicação no Docker Hub.
+- [`docker-compose.stack.yml`](https://github.com/wwagner33/terra.ce/blob/main/docker-compose.stack.yml) e [`stack.env.example`](https://github.com/wwagner33/terra.ce/blob/main/stack.env.example), no superprojeto.
 
 ## Prática no projeto
 
@@ -375,10 +306,9 @@ itens:
 - [Vídeo]{.selo} [O mínimo que você precisa saber sobre Docker](https://www.youtube.com/watch?v=ntbpIfS44Gw). Diolinux, 14 min, português.
 - [Vídeo]{.selo} [Aprenda Docker do zero, tutorial completo com deploy](https://www.youtube.com/watch?v=DdoncfOdru8). Fernanda Kipper, 44 min, português.
 - [Vídeo]{.selo} [Docker Compose na prática](https://www.youtube.com/watch?v=HxPz3eLnXZk). Programador a Bordo, 12 min, português.
-- [Vídeo]{.selo} [Controle seus containers de maneira simples com o Portainer](https://www.youtube.com/watch?v=q0LrLN4fylw). Diolinux Labs, 10 min, português.
 - [Vídeo]{.selo} [Podman Tutorial Zero to Hero](https://www.youtube.com/watch?v=YXfA5O5Mr18). Amadeus for Developers, 1 h, inglês.
 - [Documentação]{.selo} [Docker: primeiros passos](https://docs.docker.com/get-started/) e [boas práticas de build](https://docs.docker.com/build/building/best-practices/). Inglês.
 - [Documentação]{.selo} [Referência do Compose](https://docs.docker.com/reference/compose-file/) e [interpolação de variáveis](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/). Inglês.
-- [Documentação]{.selo} [Podman](https://docs.podman.io/en/latest/) e [Portainer](https://docs.portainer.io/). Inglês.
+- [Documentação]{.selo} [Podman](https://docs.podman.io/en/latest/). Inglês.
 - [Documentação]{.selo} [Imagem oficial do Postgres](https://hub.docker.com/_/postgres): volumes e variáveis. Inglês.
 :::

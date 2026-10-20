@@ -35,6 +35,7 @@ treinamento-terra-digital/
 │   ├── dadosSql.js             #   banco sintético dos exercícios de SQL (gerado)
 │   └── js-yaml.min.js          #   leitor de YAML (biblioteca externa, licença MIT)
 ├── ferramentas/
+│   ├── anonimizarDatasets.py   # gera os CSVs anonimizados que a equipe recebe (uso da coordenação)
 │   ├── exercicios.py           # índice, validação e teste dos exercícios
 │   ├── gerarDadosSinteticos.py # gera o dadosSql.js
 │   └── verificarLinks.py       # confere os links externos, inclusive os vídeos
@@ -319,7 +320,7 @@ explicacao: O `testar` confere as duas primeiras automaticamente. As outras depe
 - roda a `solucao` de cada exercício de SQL no banco sintético.
 
 O mesmo comando roda na CI de cada pull request que muda o material, antes de
-renderizar o site ([publicação](publicacao.qmd#publicar-este-site-de-treinamento)).
+renderizar o site ([publicação](#publicacao)).
 
 Antes de cada `quarto render` ou `quarto preview`, o `exercicios.py` também
 regera o `indiceExercicios.js`, que alimenta a página
@@ -344,6 +345,20 @@ externos. Sites mudam de endereço e vídeos saem do ar:
 ```bash
 ./rodar.sh links
 ```
+
+## Publicação deste site {#publicacao}
+
+O workflow
+[`.github/workflows/treinamento.yml`](https://github.com/wwagner33/terra.ce/blob/main/.github/workflows/treinamento.yml)
+do superprojeto faz tudo:
+
+- em cada **pull request** que muda `treinamento-terra-digital/`: valida os
+  exercícios, roda as soluções e renderiza o site. O resultado fica como
+  artefato do job, para baixar e conferir;
+- na **main**: faz o mesmo e publica no **GitHub Pages**, em
+  <https://wwagner33.github.io/terra.ce/>.
+
+Não há passo manual: o merge do pull request na `main` publica a mudança.
 
 ## Quando o código da plataforma mudar
 
