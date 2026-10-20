@@ -1,8 +1,11 @@
 project:
   type: website
   output-dir: _site
-  # Gera o índice usado pela página "Meu progresso". Só usa a biblioteca padrão do Python.
-  pre-render: ferramentas/exercicios.py
+  # Geram o índice da página "Meu progresso" e a data de publicação do rodapé.
+  # Só usam a biblioteca padrão do Python.
+  pre-render:
+    - ferramentas/exercicios.py
+    - ferramentas/dataPublicacao.py
   render:
     - "*.qmd"
     - "comece/*.qmd"
@@ -90,7 +93,7 @@ website:
   page-footer:
     left: "Terra Digital · Projeto Cientista Chefe Terra (IDACE, UFC e Funcap)"
     center: "Conteúdo sob a licença [CC BY-NC-ND 4.0](https://creativecommons.org/licenses/by-nc-nd/4.0/deed.pt-br)"
-    right: "Feito com [Quarto](https://quarto.org)"
+    right: "Publicado em {{< var publicacao >}} · Feito com [Quarto](https://quarto.org)"
 
 format:
   html:

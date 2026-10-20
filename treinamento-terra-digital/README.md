@@ -48,7 +48,7 @@ Actions*.
 | `projeto-integrador.qmd`, `glossario.qmd`, `referencias.qmd` | fechamento do treinamento |
 | `estilos/` | tema claro, tema escuro e layout comum |
 | `_extensions/exercicios/` | o motor dos exercícios autocorrigidos |
-| `ferramentas/` | índice, validação e teste dos exercícios; gerador do banco sintético; anonimização dos CSVs do miniserver; verificador de links |
+| `ferramentas/` | índice, validação e teste dos exercícios; data de publicação do rodapé; gerador do banco sintético; anonimização dos CSVs do miniserver; verificador de links |
 | `rodar.sh` | abre, testa, constrói e serve o site na sua máquina |
 
 O guia completo de autoria, com o formato de cada tipo de exercício, está em

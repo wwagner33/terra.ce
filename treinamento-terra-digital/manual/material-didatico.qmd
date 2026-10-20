@@ -36,6 +36,7 @@ treinamento-terra-digital/
 │   └── js-yaml.min.js          #   leitor de YAML (biblioteca externa, licença MIT)
 ├── ferramentas/
 │   ├── anonimizarDatasets.py   # gera os CSVs anonimizados que a equipe recebe (uso da coordenação)
+│   ├── dataPublicacao.py       # grava a data de publicação do rodapé (antes de cada render)
 │   ├── exercicios.py           # índice, validação e teste dos exercícios
 │   ├── gerarDadosSinteticos.py # gera o dadosSql.js
 │   └── verificarLinks.py       # confere os links externos, inclusive os vídeos
@@ -324,7 +325,8 @@ renderizar o site ([publicação](#publicacao)).
 
 Antes de cada `quarto render` ou `quarto preview`, o `exercicios.py` também
 regera o `indiceExercicios.js`, que alimenta a página
-[Meu progresso](../progresso.qmd).
+[Meu progresso](../progresso.qmd), e o `dataPublicacao.py` grava em
+`_variables.yml` a data que aparece no rodapé como data de publicação.
 
 ~~~exercicio
 id: material-comando
