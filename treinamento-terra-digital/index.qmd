@@ -56,7 +56,7 @@ flowchart LR
 | Banco de dados | Guarda imóveis, municípios, assentamentos e reservatórios com geometria | PostgreSQL, PostGIS | [M3](modulos/m03-geoprocessamento.qmd), [M4](modulos/m04-postgis.qmd) |
 | `terraGeoDataMiniServer` | API somente leitura com dados e GeoJSON, protegida por JWT | FastAPI, Pydantic, Gunicorn | [M5](modulos/m05-fastapi.qmd), [M6](modulos/m06-seguranca.qmd) |
 | `dashboard_fundiario_ceara` | Painéis com gráficos, mapas e o Índice de Gini | Streamlit, Folium, pandas, GeoPandas | [M7](modulos/m07-streamlit.qmd), [M8](modulos/m08-mapas-graficos.qmd) |
-| Infraestrutura | Imagens no Docker Hub, stack no Portainer, testes no GitHub Actions | Podman/Docker, Compose, GitHub Actions | [M14](modulos/m14-containers.qmd), [M15](modulos/m15-integracao-continua.qmd) |
+| Infraestrutura | Imagens de container, a stack em compose e os testes no GitHub Actions | Podman/Docker, Compose, GitHub Actions | [M14](modulos/m14-containers.qmd), [M15](modulos/m15-integracao-continua.qmd) |
 
 ## Os módulos
 

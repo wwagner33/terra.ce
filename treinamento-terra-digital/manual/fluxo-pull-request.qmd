@@ -5,7 +5,11 @@ subtitle: "O caminho completo para programadores, do terminal ao merge"
 
 Este guia usa o terminal e o [GitHub CLI](https://cli.github.com) (`gh`). Tudo o
 que o `gh` faz também pode ser feito pelo site do GitHub. Os exemplos são do
-dashboard; no miniserver é igual.
+dashboard; no miniserver é igual. Os comandos são de Linux e macOS; no Windows,
+rode-os no WSL ([M1](../modulos/m01-ambiente-git.qmd#windows)).
+
+No fim da página, [o dia a dia, passo a passo](#dia-a-dia) resume a rotina de
+toda mudança.
 
 ## 0. Preparação (uma vez)
 
@@ -26,18 +30,11 @@ um **fork** (uma cópia na própria conta) e abre o pull request a partir dele;
 veja a [seção sobre forks](#contribuindo-por-fork).
 :::
 
-## 1. Comece por uma issue
+## 1. Combine a mudança antes de começar
 
-Uma **issue** descreve o problema ou a ideia antes do código. Ela evita
-trabalho duplicado e permite combinar a abordagem antes de investir horas.
-
-```bash
-gh issue list -R Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara
-gh issue create -R Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara
-```
-
-Uma boa issue diz o que acontece, o que deveria acontecer, como reproduzir e,
-se for visual, traz um print (sem dados pessoais).
+Converse com a coordenação sobre o problema e a abordagem antes de investir
+horas: isso evita trabalho duplicado e retrabalho. Não abra *issues* no GitHub
+para isso; a conversa basta e mantém os repositórios limpos.
 
 ## 2. Atualize a main e crie a branch
 
@@ -48,11 +45,11 @@ cd dashboard_fundiario_ceara
 git remote -v                     # confira: deve apontar para Projeto-Cientista-Chefe-Terra
 git switch main
 git pull
-git switch -c correcao/filtro-escolas-12
+git switch -c correcao/filtro-escolas
 ```
 
-Sugestão de nome de branch: `tipo/descricao-curta`, com o número da issue no
-fim quando houver.
+Sugestão de nome de branch: `tipo/descricao-curta`, só com letras minúsculas
+sem acento, números e hífens.
 
 | Tipo | Para quê |
 |---|---|
@@ -63,48 +60,6 @@ fim quando houver.
 | `testes/` | só testes |
 | `infra/` | Docker, compose, CI |
 | `estudo/` | exercícios do treinamento, sem intenção de merge |
-
-~~~exercicio
-id: pr-branch
-tipo: python
-pergunta: |
-  Escreva `nomeDeBranchValido(nome)` para a convenção sugerida: um dos tipos
-  da tabela, uma barra e uma descrição com letras minúsculas sem acento,
-  números e hífens (sem começar nem terminar com hífen).
-inicial: |
-  import re
-
-  TIPOS = ["correcao", "funcionalidade", "design", "docs", "testes", "infra", "estudo"]
-
-  def nomeDeBranchValido(nome):
-      return "/" in nome
-
-  print(nomeDeBranchValido("correcao/filtro-escolas-12"))
-solucao: |
-  import re
-
-  TIPOS = ["correcao", "funcionalidade", "design", "docs", "testes", "infra", "estudo"]
-  PADRAO = re.compile(r"^(?:" + "|".join(TIPOS) + r")/[a-z0-9]+(?:-[a-z0-9]+)*$")
-
-  def nomeDeBranchValido(nome):
-      return bool(PADRAO.match(nome))
-
-  print(nomeDeBranchValido("correcao/filtro-escolas-12"))
-testes:
-  - nome: aceita nomes no padrão
-    codigo: |
-      for nome in ["correcao/filtro-escolas-12", "design/paleta-gini", "estudo/maria", "infra/ci-miniserver"]:
-          assert nomeDeBranchValido(nome), nome
-  - nome: recusa tipo desconhecido ou ausente
-    codigo: |
-      for nome in ["fix/filtro", "filtro-escolas", "Correcao/filtro"]:
-          assert not nomeDeBranchValido(nome), nome
-  - nome: recusa acentos, espaços, maiúsculas e hífens nas pontas
-    codigo: |
-      for nome in ["design/paleta-cartão", "docs/novo readme", "docs/Readme", "docs/-readme", "docs/readme-"]:
-          assert not nomeDeBranchValido(nome), nome
-explicacao: Um padrão assim pode virar uma verificação automática na CI, se a equipe quiser exigir.
-~~~
 
 ## 3. Faça a mudança
 
@@ -146,7 +101,7 @@ explicacao: O `git diff --staged` é o último ponto em que um segredo pode ser 
 
 ```bash
 git remote -v                               # de novo: o push vai para a organização?
-git push -u origin correcao/filtro-escolas-12
+git push -u origin correcao/filtro-escolas
 ```
 
 ## 5. Abra o pull request
@@ -169,8 +124,6 @@ e sem abreviação.
 ## Por quê
 Ao selecionar "mons. Tabosa", a lista ficava vazia e a página quebrava (B1).
 
-Closes #12
-
 ## Como testar
 1. `streamlit run app.py` e abra "Mapa Escolas do Campo".
 2. Selecione "Monsenhor Tabosa": as escolas aparecem.
@@ -185,23 +138,6 @@ Antes | Depois (computador e celular, sem dados pessoais)
 - [ ] Documentação atualizada, se necessário
 - [ ] Nenhum segredo ou dado pessoal no diff nem nos prints
 ```
-
-A linha `Closes #12` fecha a issue automaticamente no merge. A palavra-chave
-precisa ser em inglês: `Closes`, `Fixes` ou `Resolves`.
-
-~~~exercicio
-id: pr-closes
-tipo: escolha
-pergunta: O que escrever na descrição para que a issue 12 seja fechada automaticamente quando o pull request entrar na main?
-opcoes:
-  - texto: "`Closes #12`"
-    correta: true
-  - texto: "`Fecha #12`"
-    explicacao: O GitHub só reconhece as palavras-chave em inglês.
-  - texto: "`Issue 12`"
-    explicacao: Isso cria só uma menção, sem fechar nada. Falta a palavra-chave e o `#`.
-explicacao: "`Fixes #12` e `Resolves #12` também funcionam."
-~~~
 
 ## 6. Acompanhe a CI
 
@@ -233,7 +169,7 @@ seguida:
 
 ```bash
 git switch main && git pull
-git branch -d correcao/filtro-escolas-12        # apaga a branch local
+git branch -d correcao/filtro-escolas           # apaga a branch local
 ```
 
 ## 9. Atualize o superprojeto
@@ -290,7 +226,7 @@ original. Para atualizar o fork: `git fetch upstream && git merge upstream/main`
 | O push foi para o repositório errado | Confira `git remote -v`, avise quem cuida do repositório que recebeu o push e refaça no certo. Cuidado com `git submodule sync` ([M1](../modulos/m01-ambiente-git.qmd)). |
 | A CI falha mas na minha máquina passa | Compare versões e variáveis: a CI instala o `requirements-dev.txt` do zero e não tem o seu `secrets.toml`. |
 | Comecei na branch errada | `git stash`, `git switch` para a branch certa, `git stash pop`. |
-| O PR ficou grande demais | Divida: abra um PR só com a primeira parte e transforme o resto em issues. |
+| O PR ficou grande demais | Divida: abra um PR só com a primeira parte e deixe o resto para os próximos. |
 
 ~~~exercicio
 id: pr-segredo
@@ -314,19 +250,54 @@ tipo: checklist
 pergunta: Uma contribuição real e pequena para começar.
 itens:
   - "Escolhi uma correção pequena: por exemplo, o valor padrão `reseratorios_ceara` no `config.py` do miniserver ou o cabeçalho `Authorization` que falta no `testes_api.sh`."
-  - Abri (ou comentei) a issue correspondente.
+  - Combinei a correção com a coordenação antes de começar.
   - Criei a branch com o nome no padrão e fiz commits pequenos.
   - Rodei lint e testes, e conferi o `git diff --staged`.
   - Abri o pull request com o modelo de descrição.
   - Respondi aos comentários da revisão até a aprovação.
 ~~~
 
+## O dia a dia, passo a passo {#dia-a-dia}
+
+Toda mudança segue esta rotina. Os detalhes de cada passo estão nas seções
+acima.
+
+1. **Combine** a mudança com a coordenação.
+2. **Atualize a `main`** dentro do submódulo e confira o remoto:
+
+   ```bash
+   cd dashboard_fundiario_ceara
+   git switch main && git pull
+   git remote -v                  # deve apontar para Projeto-Cientista-Chefe-Terra
+   ```
+
+3. **Crie a branch** da mudança: `git switch -c tipo/descricao-curta`.
+4. **Faça a mudança** em passos pequenos, com o teste que a comprova.
+5. **Confira antes de cada commit**:
+
+   ```bash
+   ruff check .
+   .venv/bin/python -m pytest -q
+   git status                     # nada de .env, secrets.toml, CSVs ou .venv
+   git add arquivo-alterado.py
+   git diff --staged              # leia o que vai entrar
+   git commit -m "Diz o que mudou"
+   ```
+
+6. **Envie a branch**: `git push -u origin tipo/descricao-curta`.
+7. **Abra o pull request** com o modelo de descrição: `gh pr create --base main`.
+8. **Acompanhe a CI** com `gh pr checks` e corrija até ficar verde.
+9. **Responda à revisão** com commits novos na mesma branch.
+10. **Depois do merge**, volte para a `main`, atualize e apague a branch local:
+    `git switch main && git pull && git branch -d tipo/descricao-curta`.
+11. **Atualize o submódulo** no superprojeto, num pull request pequeno no
+    `terra.ce`.
+
 ## Para aprofundar
 
 ::: {.recursos}
 - [Vídeo]{.selo} [Curso gratuito Git e GitHub #14: fazendo pull request](https://www.youtube.com/watch?v=RNbKd8cD0LI). Tiago Matos, 10 min, português.
 - [Documentação]{.selo} [Manual do GitHub CLI](https://cli.github.com/manual/). Inglês.
-- [Documentação]{.selo} [Vincular um pull request a uma issue](https://docs.github.com/pt/issues/tracking-your-work-with-issues/using-issues/linking-a-pull-request-to-an-issue). GitHub Docs, português.
 - [Documentação]{.selo} [Resolver conflitos de merge](https://docs.github.com/pt/pull-requests/collaborating-with-pull-requests/addressing-merge-conflicts/resolving-a-merge-conflict-using-the-command-line). GitHub Docs, português.
 - [Livro]{.selo} [Pro Git: branches](https://git-scm.com/book/pt-br/v2). Português.
 :::

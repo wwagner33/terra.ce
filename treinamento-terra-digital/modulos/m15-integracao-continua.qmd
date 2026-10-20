@@ -1,6 +1,6 @@
 ---
-title: "M15 · Integração e entrega contínuas"
-subtitle: "GitHub Actions, verificações em cada pull request e o caminho até a produção"
+title: "M15 · Integração contínua"
+subtitle: "GitHub Actions e verificações automáticas em cada pull request"
 ---
 
 ::: {.ficha-modulo}
@@ -10,10 +10,8 @@ subtitle: "GitHub Actions, verificações em cada pull request e o caminho até 
 ::: {.callout-note appearance="simple"}
 ## Por que isso importa no Terra.Ce
 Desde a versão 1.2.0, todo push e todo pull request do dashboard rodam o lint e
-os 291 testes no GitHub Actions. O miniserver ainda não tem esse workflow, e a
-implantação continua manual: build na máquina de alguém, push no Docker Hub,
-atualização no Portainer. A equipe quer automatizar esse caminho sem trocar a
-infraestrutura.
+os 291 testes no GitHub Actions. O miniserver ainda não tem esse workflow:
+escrevê-lo é a prática deste módulo.
 :::
 
 ## Objetivos
@@ -21,7 +19,6 @@ infraestrutura.
 - Diferenciar integração contínua, entrega contínua e implantação contínua.
 - Ler e escrever um workflow do GitHub Actions.
 - Configurar a verificação do miniserver.
-- Desenhar uma entrega automática com aprovação humana.
 - Manter segredos e permissões seguros na CI.
 
 ## 1. CI e CD
@@ -30,13 +27,12 @@ infraestrutura.
   automaticamente (lint, testes, build). Problemas aparecem em minutos, no
   pull request, e não na produção.
 - **Entrega contínua (CD)**: cada versão aprovada gera automaticamente um
-  artefato pronto para produção, como uma imagem no Docker Hub.
+  artefato pronto para produção, como uma imagem de container.
 - **Implantação contínua**: a versão aprovada vai para a produção sem
   intervenção humana.
 
-O projeto tem CI no dashboard. A entrega e a implantação contínuas estão
-propostas, com uma decisão em aberto: implantar direto a partir da `main` ou
-exigir uma aprovação humana antes da produção.
+O projeto tem CI no dashboard. A entrega e a implantação na produção ficam com
+a coordenação e não fazem parte deste material.
 
 ## 2. Anatomia de um workflow
 
@@ -172,45 +168,7 @@ jobs:
         run: python -m pytest -q
 ```
 
-## 4. Entrega contínua: a proposta do projeto
-
-A proposta discutida pela equipe mantém a infraestrutura atual (Docker Hub e
-Portainer) e automatiza o que hoje é manual:
-
-```{mermaid}
-%%| fig-cap: "Proposta de entrega: a imagem é construída pela CI e a produção só muda depois de uma aprovação."
-flowchart TB
-    tag["git tag v1.3.0"] --> ci["GitHub Actions<br/>lint e testes"]
-    ci --> build["build da imagem<br/>tags 1.3.0 e o commit"]
-    build --> hub[("Docker Hub")]
-    hub --> aprov{"aprovação<br/>no ambiente production"}
-    aprov -->|aprovado| hook["webhook do Portainer"]
-    hook --> stack["stack atualizada"]
-```
-
-- Segredos necessários no GitHub: `DOCKERHUB_USERNAME`, `DOCKERHUB_TOKEN` (um
-  token de acesso, nunca a senha) e `PORTAINER_WEBHOOK_URL`.
-- A **aprovação** usa os *Environments* do GitHub: um ambiente `production`
-  com revisores obrigatórios segura o job de implantação até alguém aprovar.
-- Implantar direto da `main`, sem aprovação, é mais rápido, mas uma mudança
-  mesclada por engano iria para o ar sozinha. **Essa política precisa ser
-  decidida pela coordenação antes de o workflow ser ativado.**
-
-~~~exercicio
-id: m15-aprovacao
-tipo: escolha
-pergunta: Que recurso do GitHub permite que o job de implantação espere a aprovação de uma pessoa?
-opcoes:
-  - texto: Um environment com revisores obrigatórios
-    correta: true
-  - texto: Uma branch protegida
-    explicacao: A proteção de branch controla o que entra na `main`, não quando um job roda.
-  - texto: Um secret com o nome APROVADO
-    explicacao: Secrets guardam valores. Não pausam workflows.
-explicacao: 'O job declara `environment: production`, e o GitHub pausa a execução até um revisor aprovar.'
-~~~
-
-## 5. Segurança na CI
+## 4. Segurança na CI
 
 ~~~exercicio
 id: m15-boas-praticas
@@ -223,7 +181,7 @@ opcoes:
     correta: true
   - texto: Imprimir os segredos no log para conferir se chegaram
     explicacao: O GitHub mascara segredos conhecidos, mas transformações do valor escapam da máscara. Nunca imprima.
-  - texto: Usar um token de acesso do Docker Hub em vez da senha da conta
+  - texto: Guardar tokens nos *secrets* do repositório, e não no arquivo do workflow
     correta: true
   - texto: Exigir que a CI passe antes de permitir o merge
     correta: true
@@ -310,24 +268,7 @@ explicacao: |
   `actionlint` e o `zizmor` fazem essa auditoria de forma completa.
 ~~~
 
-~~~exercicio
-id: m15-desenho
-tipo: aberta
-pergunta: Desenhe, em passos, o workflow de entrega do miniserver disparado por uma tag `v*`. Onde entram os testes, o build, o push, a aprovação e o webhook? O que acontece se o webhook falhar?
-resposta: |
-  1. **Gatilho**: `on: push: tags: ["v*"]`.
-  2. **Job de verificação**: lint e testes, como no workflow de CI. Se falhar, nada segue.
-  3. **Job de build** (`needs:` o anterior): login no Docker Hub com o token,
-     build com as tags da versão (`1.3.0`) e do commit, push.
-  4. **Job de implantação** com `environment: production` (revisores obrigatórios):
-     chama o `PORTAINER_WEBHOOK_URL` com `curl --fail`.
-  5. **Se o webhook falhar**: o job falha e avisa; a produção continua na versão
-     anterior, porque o Portainer não recebeu nada. A imagem já está no Docker
-     Hub, então dá para atualizar a stack à mão ou repetir o job.
-  6. Dashboard e miniserver devem ser implantados juntos quando o contrato mudar.
-~~~
-
-## 6. A CI deste próprio site
+## 5. A CI deste próprio site
 
 O material que você está lendo também tem CI: a cada pull request que muda a
 pasta `treinamento-terra-digital/`, um workflow valida o YAML de todos os
@@ -338,7 +279,6 @@ renderiza o site. Na `main`, ele publica o resultado. Os detalhes estão em
 ## No código
 
 - [`testes.yml` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/.github/workflows/testes.yml).
-- [`publish-docker.sh` do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/publish-docker.sh) e [do miniserver](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/publish-docker.sh): o que a entrega automática substituiria.
 - [`Dockerfile.tgdmserver`](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer/blob/v1.2.0/Dockerfile.tgdmserver): o pacote do SpatiaLite.
 
 ## Prática no projeto
@@ -351,7 +291,6 @@ itens:
   - Escrevi o `.github/workflows/testes.yml` do miniserver a partir do esboço.
   - Rodei o workflow no fork e corrigi até ficar verde.
   - Introduzi um erro de propósito numa branch e vi o pull request ficar vermelho.
-  - Esbocei, sem ativar, o workflow de entrega por tag, com os segredos e o environment de aprovação.
   - Rodei a função `auditarWorkflow` (ou o `actionlint`) nos workflows que escrevi.
 ~~~
 
@@ -361,7 +300,6 @@ itens:
 - [Vídeo]{.selo} [Pipeline (CD/CI), Dicionário do Programador](https://www.youtube.com/watch?v=AZtTd3pFVTY). Código Fonte TV, 7 min, português.
 - [Vídeo]{.selo} [Criando um workflow automatizado de CI com o GitHub Actions](https://www.youtube.com/watch?v=F51HlrEeedw). Fernanda Kipper, 15 min, português.
 - [Documentação]{.selo} [GitHub Actions](https://docs.github.com/pt/actions). Português.
-- [Documentação]{.selo} [Webhooks do Portainer](https://docs.portainer.io/). Inglês.
 - [Ferramenta]{.selo} [actionlint](https://github.com/rhysd/actionlint): verifica a sintaxe e problemas comuns de workflows. Inglês.
 - [Ferramenta]{.selo} [Trivy](https://trivy.dev): procura vulnerabilidades em imagens. Inglês.
 :::

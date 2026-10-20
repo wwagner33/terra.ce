@@ -25,6 +25,14 @@ submódulos com segurança é o primeiro passo para contribuir.
 
 ## 1. Terminal, variáveis de ambiente e caminhos
 
+::: {.callout-important}
+## Os comandos são de Linux e macOS
+Todos os comandos deste material são para o terminal do **Linux** ou do
+**macOS** (bash ou zsh). No Windows, eles não funcionam no Prompt de Comando
+nem no PowerShell: prepare antes o WSL, como explica a seção
+[Se você usa Windows](#windows), logo abaixo.
+:::
+
 Quase tudo no projeto passa pelo terminal. Os comandos que você vai usar o tempo
 todo:
 
@@ -40,6 +48,43 @@ todo:
 para os programas do projeto: `JWT_SECRET`, `DATA_SERVICE_URL`,
 `POSTGRES_PASSWORD`. Elas não ficam no código, e é isso que permite usar
 valores diferentes na sua máquina e em produção.
+
+### Se você usa Windows {#windows}
+
+O projeto é desenvolvido e testado em Linux. No Windows, use o **WSL 2**
+(Subsistema do Windows para Linux): ele roda um Ubuntu dentro do Windows, e
+todos os comandos do material funcionam lá sem mudança.
+
+1. Abra o **PowerShell como administrador** e rode `wsl --install`. O comando
+   instala o WSL 2 com o Ubuntu. Reinicie o computador quando ele pedir.
+2. Abra o **Ubuntu** pelo menu Iniciar e crie o usuário e a senha do Linux.
+   Eles não precisam ser os mesmos do Windows.
+3. No terminal do Ubuntu, instale o Git, o SpatiaLite e as bibliotecas que o
+   asdf usa para compilar o Python (seção 2):
+
+   ```bash
+   sudo apt update
+   sudo apt install -y git curl build-essential libssl-dev zlib1g-dev \
+       libbz2-dev libreadline-dev libsqlite3-dev libffi-dev liblzma-dev \
+       libsqlite3-mod-spatialite
+   ```
+
+4. Clone e trabalhe **dentro do Linux**, por exemplo em `~/projetos`, e não
+   em `/mnt/c/...`. Nas pastas do Windows o Git e o Python ficam bem mais
+   lentos, e os scripts `.sh` podem quebrar por causa do fim de linha do
+   Windows (CRLF).
+5. Configure o Git dentro do Ubuntu: nome, e-mail e autenticação, como no
+   [pull request passo a passo](../manual/fluxo-pull-request.qmd). Se o
+   Windows também tiver o Git instalado, a configuração dele é separada.
+6. Para editar o código, use o VS Code com a extensão **WSL**: no terminal do
+   Ubuntu, entre na pasta do projeto e rode `code .`.
+7. Para os containers do [M14](m14-containers.qmd), instale o Podman dentro
+   do Ubuntu: `sudo apt install -y podman`.
+
+Sem o WSL, o PowerShell usa outros comandos (`dir` no lugar de `ls`,
+`$env:NOME = "valor"` no lugar de `export`, `.venv\Scripts\python` no lugar de
+`.venv/bin/python`), e o SpatiaLite e os scripts `.sh` do projeto não funcionam
+do mesmo jeito. Por isso o material não cobre esse caminho.
 
 ## 2. Python na versão certa
 
@@ -165,7 +210,7 @@ flowchart TB
     s["terra.ce (superprojeto)<br/>commit 9897bd2"]
     s -->|"aponta para 997f558 (v1.2.0)"| d["dashboard_fundiario_ceara<br/>github.com/Projeto-Cientista-Chefe-Terra"]
     s -->|"aponta para d0859cc (v1.2.0)"| m["terraGeoDataMiniServer<br/>github.com/Projeto-Cientista-Chefe-Terra"]
-    s --- r["docker-compose.stack.yml<br/>IMPLANTACAO_PORTAINER.md<br/>treinamento-terra-digital/"]
+    s --- r["docker-compose.stack.yml<br/>treinamento-terra-digital/"]
 ```
 
 O ponto central: **o superprojeto guarda um commit específico de cada

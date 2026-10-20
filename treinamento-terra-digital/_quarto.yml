@@ -21,7 +21,7 @@ website:
   repo-url: https://github.com/wwagner33/terra.ce
   repo-subdir: treinamento-terra-digital
   repo-branch: main
-  repo-actions: [edit, source, issue]
+  repo-actions: [edit, source]
   page-navigation: true
   back-to-top-navigation: true
   search:
@@ -85,7 +85,6 @@ website:
           - manual/fluxo-pull-request.qmd
           - manual/designers.qmd
           - manual/revisao.qmd
-          - manual/publicacao.qmd
           - manual/material-didatico.qmd
       - referencias.qmd
   page-footer:

@@ -67,5 +67,4 @@ Os canais que mais aparecem nos módulos, para quem gosta de aprender por vídeo
 
 - [Plano de treinamento](https://github.com/wwagner33/terra.ce/blob/main/PLANO_DE_TREINAMENTO.md), que deu origem a este site.
 - [Plano de melhoria do dashboard](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/plano_melhoria_codigo.md), com os achados e decisões citados no treinamento.
-- [Roteiro de implantação no Portainer](https://github.com/wwagner33/terra.ce/blob/main/IMPLANTACAO_PORTAINER.md).
 - [Plataforma no ar](https://terrace.virtual.ufc.br/paineis).

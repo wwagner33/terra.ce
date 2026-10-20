@@ -8,9 +8,9 @@ subtitle: "Doze semanas, com módulos de base para todos e aprofundamentos por p
 Cada semana tem de 8 a 10 horas de estudo. A entrega da semana é curta e
 revisada por alguém da equipe.
 
-| Semana | Módulos | Entrega |
+| Semana | Módulos e leituras | Entrega |
 |---|---|---|
-| 1 | [M0](../modulos/m00-dominio-fundiario.qmd), [M1](../modulos/m01-ambiente-git.qmd) | Ambiente montado, as duas suítes de testes passando e glossário do domínio |
+| 1 | [M0](../modulos/m00-dominio-fundiario.qmd), [M1](../modulos/m01-ambiente-git.qmd) e a [página inicial do manual](../manual/index.qmd) | Ambiente montado, as duas suítes de testes passando e glossário do domínio |
 | 2 | [M2](../modulos/m02-python-dados.qmd) | Notebook com a classificação por módulo fiscal e o Gini calculados à mão e pelo código |
 | 3 | [M3](../modulos/m03-geoprocessamento.qmd) | Notebook comparando sistemas de referência e tolerâncias de simplificação |
 | 4 | [M4](../modulos/m04-postgis.qmd) | Arquivo `.sql` com as consultas da prática e os planos de execução |
@@ -19,8 +19,11 @@ revisada por alguém da equipe.
 | 7 | [M9](../modulos/m09-engenharia-dados.qmd), [M13](../modulos/m13-lgpd.qmd) | Relatório da carga repetida duas vezes e análise da regra de privacidade |
 | 8 | [M10](../modulos/m10-desempenho-cache.qmd), [M11](../modulos/m11-testes.qmd) | Medições de cache e compressão; testes novos |
 | 9 | [M12](../modulos/m12-qualidade-documentacao.qmd), [M14](../modulos/m14-containers.qmd) | Stack completa em containers locais; um diagrama atualizado |
-| 10 | [M15](../modulos/m15-integracao-continua.qmd) | Workflow de CI do miniserver, com lint e testes |
+| 10 | [M15](../modulos/m15-integracao-continua.qmd), [pull request passo a passo](../manual/fluxo-pull-request.qmd) e [revisão de código](../manual/revisao.qmd) | Workflow de CI do miniserver, com lint e testes |
 | 11 e 12 | [Projeto integrador](../projeto-integrador.qmd) | Pull request revisado e apresentação de 15 minutos |
+
+As leituras do [manual de contribuição](../manual/index.qmd) também têm
+exercícios e contam no seu progresso.
 
 ## Trilhas por perfil
 
@@ -66,6 +69,13 @@ não obrigatórios para quem não vai escrever Python.
 - **Projeto integrador**: um pull request real, revisado e apresentado.
 
 ## Autoavaliação final
+
+Esta autoavaliação é para o **fim** do treinamento. Por enquanto, use a lista
+para saber aonde você vai chegar, e volte aqui depois do projeto integrador.
+
+Ela não tem botão de enviar: cada item marcado fica salvo na hora, e ela só
+aparece como concluída em [Meu progresso](../progresso.qmd) quando todos os
+itens estiverem marcados. Até lá, é normal que fique pendente.
 
 Ao fim do treinamento, você deve conseguir:
 

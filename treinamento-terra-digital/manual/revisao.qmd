@@ -11,7 +11,7 @@ quem é revisado aprende com quem conhece outras partes.
 
 Siga a ordem: os problemas graves primeiro, os detalhes por último.
 
-1. **O pull request faz o que diz?** Leia a issue e a descrição. Rode o
+1. **O pull request faz o que diz?** Leia a descrição. Rode o
    código: `gh pr checkout 42` traz a branch para a sua máquina.
 2. **Está correto?** Fronteiras (exatamente 4 MF?), valores ausentes, listas
    vazias, erros da API.

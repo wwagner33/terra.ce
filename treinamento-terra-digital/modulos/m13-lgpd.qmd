@@ -313,7 +313,7 @@ Esconder o nome não esgota o problema. Três riscos merecem atenção:
 ~~~exercicio
 id: m13-camadas-imagem
 tipo: escolha
-pergunta: O `entrypoint.sh` apaga a pasta `datasets/` depois da carga. Isso tira os CSVs da imagem publicada no Docker Hub?
+pergunta: O `entrypoint.sh` apaga a pasta `datasets/` depois da carga. Isso tira os CSVs de dentro da imagem?
 opcoes:
   - texto: Não. Os arquivos foram gravados numa camada da imagem durante o build, e apagar no container não muda a imagem.
     correta: true
@@ -368,9 +368,12 @@ resposta: |
 
 ## 6. Regras de convivência com dados pessoais
 
-- Os CSVs ficam só na máquina de trabalho. Nada de nuvem pessoal, pendrive
-  esquecido ou repositório particular.
-- Nunca cole dados reais em issues, prints, mensagens ou ferramentas de IA
+- A equipe trabalha só com os CSVs anonimizados; os originais, com os nomes
+  reais, ficam com a coordenação.
+- Mesmo anonimizados, os CSVs ficam só na máquina de trabalho: os polígonos e
+  as áreas ainda permitem a reidentificação (seção 5). Nada de nuvem pessoal,
+  pendrive esquecido ou repositório particular.
+- Nunca cole dados reais em pull requests, prints, mensagens ou ferramentas de IA
   externas.
 - Testes e exemplos usam **dados sintéticos**, como os deste site e os
   `conftest.py` dos dois projetos.

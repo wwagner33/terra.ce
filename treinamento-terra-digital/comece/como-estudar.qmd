@@ -12,6 +12,10 @@ dicionários) e alguma familiaridade com o terminal. Quem ainda não tem essa
 base deve começar pelos vídeos indicados no [M1](../modulos/m01-ambiente-git.qmd)
 e no [M2](../modulos/m02-python-dados.qmd).
 
+Os comandos do material são para o terminal do Linux e do macOS. Quem usa
+Windows prepara o WSL antes, seguindo a
+[seção para Windows do M1](../modulos/m01-ambiente-git.qmd#windows).
+
 Tudo aqui usa o código real do projeto, na versão 1.2.0 do
 `terraGeoDataMiniServer` e do `dashboard_fundiario_ceara`. Quando um módulo
 mostra um trecho de código, ele vem desses repositórios.
@@ -35,6 +39,23 @@ exercícios, depois a prática no projeto. Os vídeos são complemento: use-os
 quando um conceito não ficar claro no texto. O [cronograma](cronograma.qmd)
 distribui os módulos em 12 semanas.
 :::
+
+## O manual de contribuição
+
+Os módulos ensinam a plataforma. O
+[manual de contribuição](../manual/index.qmd) ensina a trabalhar nela: como
+uma mudança sai da sua máquina e entra no código, por pull request. Ele também
+tem exercícios, que contam no seu progresso.
+
+| Quando | O que ler |
+|---|---|
+| Na semana 1, junto com o M1 | [Página inicial do manual](../manual/index.qmd): regras de ouro e papéis |
+| Na semana 10, antes do projeto integrador | [Pull request passo a passo](../manual/fluxo-pull-request.qmd) e [Revisão de código](../manual/revisao.qmd) |
+| Se você é designer | [Guia para designers](../manual/designers.qmd) |
+| Para corrigir ou ampliar este site | [Como editar este material](../manual/material-didatico.qmd) |
+
+O manual fica no menu do topo (**Manual de contribuição**) e no fim do menu
+lateral.
 
 ## Os tipos de atividade
 
@@ -155,8 +176,10 @@ só roda o código; **Verificar** roda o código e as verificações automática
 id: guia-python
 tipo: python
 pergunta: |
-  Complete a função `saudacao` para que ela devolva `"Olá, Terra.Ce!"`
-  quando receber `"Terra.Ce"`.
+  Complete a função `saudacao(nome)` para que ela devolva o texto
+  `"Olá, <nome>!"`, com o nome recebido no lugar de `<nome>`. Ela deve
+  funcionar com **qualquer** nome: `saudacao("Terra.Ce")` devolve
+  `"Olá, Terra.Ce!"` e `saudacao("IDACE")` devolve `"Olá, IDACE!"`.
 inicial: |
   def saudacao(nome):
       # troque a linha abaixo
@@ -220,8 +243,10 @@ resposta: |
 
 ### Prática guiada
 
-A prática no projeto não tem correção automática: marque cada passo quando
-concluir.
+A prática no projeto não tem correção automática nem botão de enviar: marque
+cada passo quando concluir. Cada marcação fica salva na hora, e a prática
+conta como concluída em [Meu progresso](../progresso.qmd) quando **todos** os
+passos estiverem marcados. Até lá, ela aparece como pendente.
 
 ~~~exercicio
 id: guia-checklist
@@ -237,17 +262,24 @@ itens:
 
 ::: {.callout-warning}
 ## Leia antes de qualquer prática
-- **Dados pessoais.** Os CSVs de `terraGeoDataMiniServer/datasets/` não estão
-  no Git e trazem nomes de pessoas físicas. Peça os arquivos à coordenação,
-  mantenha-os só na máquina de trabalho e nunca os envie para repositórios
-  pessoais, nuvens particulares ou ferramentas de IA externas.
+- **Dados pessoais.** A equipe não recebe os dados reais. Os CSVs originais
+  de `terraGeoDataMiniServer/datasets/` trazem nomes de pessoas físicas e
+  ficam só com a coordenação. Para as práticas, peça à coordenação a versão
+  anonimizada, em que os nomes de pessoas físicas e os identificadores ligados
+  a elas foram trocados por valores fictícios, e coloque os arquivos em
+  `terraGeoDataMiniServer/datasets/`. Mesmo anonimizados, os
+  polígonos e as áreas podem levar a uma pessoa ([M13](../modulos/m13-lgpd.qmd)):
+  mantenha os arquivos só na máquina de trabalho e nunca os envie para
+  repositórios, nuvens particulares ou ferramentas de IA externas.
 - **Segredos.** Use valores de mentira. Gere um `JWT_SECRET` local com
   `python -c "import secrets; print(secrets.token_urlsafe(48))"` e nunca copie
-  valores da stack de produção.
+  valores de produção.
 - **Mapa local.** Deixe `CARTO_API_KEY` vazia em `localhost`: a chave só vale
   para `terrace.virtual.ufc.br`, e sem ela o mapa usa o OpenStreetMap.
-- **Produção.** Não altere a stack do Portainer nem as imagens do Docker Hub.
-  As práticas de implantação usam containers locais.
+- **Produção.** Ninguém além da coordenação mexe na produção: a stack do
+  Portainer, as imagens publicadas no Docker Hub e o servidor. A implantação
+  em produção não faz parte deste material; todas as práticas usam containers
+  na sua máquina.
 :::
 
 ## Seu progresso
@@ -265,7 +297,12 @@ navegador. Isso tem três consequências:
 
 - Dúvida sobre o conteúdo: anote e leve para o encontro com quem acompanha o
   seu treinamento.
-- Erro no material (link quebrado, exercício com resposta errada): use o link
-  **Relatar um problema** no rodapé de cada página. Ele abre uma *issue* no
-  GitHub. Melhor ainda: corrija e mande um pull request, como explica o
-  [manual de contribuição](../manual/material-didatico.qmd).
+- Erro no material (link quebrado, exercício com resposta errada): avise quem
+  acompanha o seu treinamento. Melhor ainda: corrija e mande um pull request,
+  como explica o [manual de contribuição](../manual/material-didatico.qmd).
+
+## Por onde seguir
+
+1. Veja o [cronograma](cronograma.qmd) e a trilha do seu perfil.
+2. Leia a [página inicial do manual de contribuição](../manual/index.qmd).
+3. Comece o [M0 · O domínio fundiário](../modulos/m00-dominio-fundiario.qmd).

@@ -91,6 +91,12 @@
   flex-shrink: 0;
 }
 
+.exercicio-contagem {
+  margin: 0.5rem 0 0;
+  font-size: 0.85rem;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
 .exercicio-campo-curto {
   max-width: 22rem;
 }

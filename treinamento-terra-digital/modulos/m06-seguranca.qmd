@@ -256,10 +256,12 @@ explicacao: A margem evita que um token vença no caminho entre o dashboard e o 
 
 | Segredo | Quem usa | Em produção | No desenvolvimento |
 |---|---|---|---|
-| `JWT_SECRET` | dashboard e miniserver | variável da stack no Portainer | `.streamlit/secrets.toml` ou variável no shell |
-| `POSTGRES_PASSWORD` | Postgres e miniserver | variável da stack | valor de estudo, criado por você |
-| `CARTO_API_KEY` | dashboard | variável da stack | vazia (usa OpenStreetMap) |
+| `JWT_SECRET` | dashboard e miniserver | variável de ambiente do container | `.streamlit/secrets.toml` ou variável no shell |
+| `POSTGRES_PASSWORD` | Postgres e miniserver | variável de ambiente do container | valor de estudo, criado por você |
+| `CARTO_API_KEY` | dashboard | variável de ambiente do container | vazia (usa OpenStreetMap) |
 | `TOKEN_GEOAPI` | importador da GeoAPI | só na hora da coleta | não use |
+
+Os valores de produção ficam só com a coordenação.
 
 As regras, todas aprendidas na prática:
 
@@ -274,10 +276,7 @@ As regras, todas aprendidas na prática:
    `streamlit run` copia o arquivo para `os.environ` ao iniciar, e o valor do
    arquivo passa por cima da variável do container. Um `CARTO_API_KEY = ""`
    no arquivo apaga a chave de produção.
-4. **No Portainer, valores sem aspas.** Ele não trata aspas como
-   delimitador: `JWT_SECRET="abc"` vira um segredo de cinco caracteres, com
-   as aspas.
-5. **Troca anual**, e imediata em caso de suspeita, seguindo o
+4. **Troca anual**, e imediata em caso de suspeita, seguindo o
    [`doc/rotacao_segredos.md`](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara/blob/v1.2.0/doc/rotacao_segredos.md).
    Segredo novo se gera com `python -c "import secrets; print(secrets.token_urlsafe(48))"`.
 
@@ -290,12 +289,12 @@ opcoes:
     correta: true
   - texto: No histórico do Git, mesmo depois de apagado o arquivo
     correta: true
-  - texto: Num print de tela colado numa issue
+  - texto: Num print de tela colado na descrição de um pull request
     correta: true
   - texto: Num log que imprime a configuração ao iniciar
     correta: true
   - texto: Numa variável de ambiente lida pelo container em produção
-    explicacao: Esse é o lugar previsto. O cuidado é com quem tem acesso ao Portainer.
+    explicacao: Esse é o lugar previsto. O cuidado é com quem tem acesso à configuração do servidor, que fica só com a coordenação.
 explicacao: Os quatro primeiros são vazamentos clássicos. O primeiro aconteceu de fato no projeto.
 ~~~
 
@@ -303,7 +302,7 @@ explicacao: Os quatro primeiros são vazamentos clássicos. O primeiro aconteceu
 id: m06-streamlit-secrets
 tipo: escolha
 pergunta: |
-  O container do dashboard recebe `JWT_SECRET=valor-de-producao` do Portainer,
+  O container do dashboard recebe `JWT_SECRET=valor-de-producao` como variável de ambiente,
   mas alguém deixou um `.streamlit/secrets.toml` com `JWT_SECRET = "valor-velho"`
   dentro da imagem. Qual valor o dashboard usa?
 opcoes:
@@ -375,7 +374,7 @@ explicacao: Escapar na saída, no lugar onde o texto vira HTML, é mais seguro d
 - **CORS.** O miniserver aceita só `GET`. Ele hoje permite qualquer origem
   (`ALLOWED_ORIGINS = ["*"]`), o que é aceitável porque toda rota exige token,
   mas restringir às origens conhecidas é uma melhoria pendente.
-- **Portas.** Na stack de produção, o Postgres (5432) e o miniserver (8000)
+- **Portas.** No compose da stack, o Postgres (5432) e o miniserver (8000)
   só aceitam conexões da própria máquina (`127.0.0.1:...`). O dashboard fala
   com o miniserver pela rede interna `terra_network`.
 - **Usuário do container.** As imagens rodam como o usuário `terra` (uid

@@ -6,8 +6,8 @@ subtitle: "Como programadores, designers e autores alteram a plataforma e public
 Toda mudança na Plataforma Terra.Ce, seja uma correção de código, uma cor nova,
 um texto da página inicial ou um exercício deste material, entra pelo mesmo
 caminho: uma **branch**, um **pull request** revisado e verificado
-automaticamente, e o **merge**. Nada vai direto para a `main`, e nada vai para
-a produção sem passar pela coordenação.
+automaticamente, e o **merge**. Nada vai direto para a `main`. A publicação na
+produção é feita só pela coordenação e não faz parte deste material.
 
 ## Os repositórios
 
@@ -15,7 +15,7 @@ a produção sem passar pela coordenação.
 |---|---|---|
 | `dashboard_fundiario_ceara` | o dashboard Streamlit: páginas, mapas, CSS, imagens | [Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara](https://github.com/Projeto-Cientista-Chefe-Terra/dashboard_fundiario_ceara) |
 | `terraGeoDataMiniServer` | a API FastAPI e os importadores de dados | [Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer](https://github.com/Projeto-Cientista-Chefe-Terra/terraGeoDataMiniServer) |
-| `terra.ce` (superprojeto) | os dois acima como submódulos, a stack de produção e **este material** | [wwagner33/terra.ce](https://github.com/wwagner33/terra.ce) |
+| `terra.ce` (superprojeto) | os dois acima como submódulos e **este material** | [wwagner33/terra.ce](https://github.com/wwagner33/terra.ce) |
 
 Uma mudança no dashboard é um pull request no repositório do dashboard. Depois
 do merge, outro pull request, pequeno, atualiza o ponteiro do submódulo no
@@ -24,10 +24,9 @@ superprojeto ([M1](../modulos/m01-ambiente-git.qmd)).
 ## O fluxo em uma figura
 
 ```{mermaid}
-%%| fig-cap: "Da ideia à produção. As duas últimas etapas são da coordenação."
+%%| fig-cap: "Da branch ao superprojeto."
 flowchart TB
-    i["Issue"] --> b["Branch"]
-    b --> c["Commits"]
+    b["Branch"] --> c["Commits"]
     c --> pr["Pull<br/>request"]
     pr --> ci{"CI"}
     ci -->|vermelha| c
@@ -35,7 +34,6 @@ flowchart TB
     rev -->|mudanças| c
     rev -->|aprovado| m["Merge"]
     m --> sup["Submódulo no<br/>superprojeto"]
-    sup --> v["Versão e<br/>publicação"]
 ```
 
 ## Papéis
@@ -45,7 +43,7 @@ flowchart TB
 | **Programador** | corrige, cria funcionalidades, escreve testes | [Pull request passo a passo](fluxo-pull-request.qmd) |
 | **Designer** | cores, tipografia, imagens, textos, gráficos e mapas | [Guia para designers](designers.qmd) |
 | **Revisor** | lê o pull request de outra pessoa e aprova ou pede mudanças | [Revisão de código](revisao.qmd) |
-| **Mantenedor** | faz o merge, cria versões e publica na produção | [Versões e publicação](publicacao.qmd) |
+| **Mantenedor** | faz o merge depois da aprovação e da CI verde | [Merge e limpeza](fluxo-pull-request.qmd#merge-e-limpeza) |
 | **Autor do material** | escreve e corrige páginas e exercícios deste site | [Como editar este material](material-didatico.qmd) |
 
 Uma pessoa pode ter vários papéis. Quem abriu um pull request não aprova o
@@ -62,23 +60,22 @@ próprio.
 5. **Descreva o porquê.** O título diz o que muda; a descrição diz por que e
    como testar.
 6. **Mudança visível tem print.** Antes e depois, no computador e no celular.
-7. **Produção é da coordenação.** Publicar versões e mexer no Portainer não
-   faz parte de um pull request.
+7. **Produção é só da coordenação.** Ninguém além da coordenação publica
+   versões ou mexe no Portainer, e isso não faz parte de nenhum pull request.
 
 ~~~exercicio
 id: manual-fluxo
 tipo: ordenar
-pergunta: Ordene o caminho de uma correção no dashboard até chegar à produção.
+pergunta: Ordene o caminho de uma correção no dashboard até o superprojeto.
 itens:
-  - Abrir ou escolher a issue que descreve o problema
+  - Combinar a correção com a coordenação
   - Criar a branch a partir da main atualizada
   - Fazer os commits e rodar lint e testes
   - Abrir o pull request com descrição e prints
   - Passar na CI e na revisão
   - Fazer o merge
   - Atualizar o ponteiro do submódulo no superprojeto
-  - Publicar a versão (coordenação)
-explicacao: As duas últimas etapas acontecem fora do pull request original e, a última, só pela coordenação.
+explicacao: A última etapa acontece fora do pull request original, num pull request pequeno no superprojeto.
 ~~~
 
 ~~~exercicio
@@ -94,8 +91,8 @@ opcoes:
     correta: true
   - texto: Um pull request em rascunho (*draft*) para pedir opinião antes de terminar
     explicacao: Rascunho é bem-vindo. Ele avisa que ainda não está pronto e convida a conversa cedo.
-  - texto: Um mantenedor publicando a versão no Portainer depois do merge
-    explicacao: Publicar é exatamente o papel do mantenedor.
+  - texto: Um pull request pequeno que só atualiza o ponteiro do submódulo no superprojeto
+    explicacao: É o passo normal depois do merge num submódulo, e é um assunto só.
 explicacao: Assunto misturado, CI vermelha e dados pessoais em prints são os três deslizes mais comuns.
 ~~~
 

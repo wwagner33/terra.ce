@@ -132,7 +132,7 @@ id: integrador-entrega
 tipo: checklist
 pergunta: Antes da apresentação.
 itens:
-  - Escolhi o projeto com a coordenação e abri (ou comentei) a issue.
+  - Escolhi o projeto com a coordenação.
   - Trabalhei numa branch com commits pequenos e o PR aberto como rascunho desde o começo.
   - CI verde, com testes novos para a mudança.
   - Nenhum segredo ou dado pessoal no diff, nos logs ou nos prints.
