@@ -10,8 +10,13 @@ Arquivos usados, na raiz do superprojeto:
 - `docker-compose.stack.yml`: a stack para colar no Portainer;
 - `stack.env.example`: o modelo das variáveis.
 
-A indisponibilidade esperada é de 5 a 15 minutos, quase toda para a carga
-inicial do miniserver.
+A indisponibilidade esperada é de poucos minutos: com
+`IMPORTAR_DADOS_NA_INICIALIZACAO=false`, o miniserver não recarrega os CSVs ao subir.
+
+Os containers da stack se chamam `terrace-postgres`, `terrace-gdmserver` e
+`terrace-dashboard`. Os atuais têm outros nomes (por exemplo `terra_postgis`,
+`terra_geodata_mini_server_v120` e `dashboard_fundiario_ce`); abaixo eles são
+chamados de "container atual do Postgres", "do miniserver" e "do dashboard".
 
 ## 1. Inventário (antes de parar qualquer coisa)
 
@@ -20,11 +25,11 @@ container, na seção *Env*, ou em *Inspect*.
 
 | Onde | O que anotar | Variável da stack |
 |---|---|---|
-| Container `terra_postgis` | `PG_MAJOR` e `POSTGIS_VERSION` | `POSTGIS_TAG`, no formato `PG_MAJOR-POSTGIS maior.menor`, por exemplo `17-3.5` |
-| Container `terra_postgis` | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | mesmos nomes |
-| Container `terra_postgis`, seção *Volumes* | nome do volume montado em `/var/lib/postgresql/data` | `POSTGRES_VOLUME` |
-| Container `terra_geodata_mini_server` | `JWT_SECRET` e os `TABLE_*` | mesmos nomes |
-| Container `dashboard_fundiario_ce` | `CARTO_API_KEY`, se existir | `CARTO_API_KEY` |
+| Container atual do Postgres | `PG_MAJOR` e `POSTGIS_VERSION` | `POSTGIS_TAG`, no formato `PG_MAJOR-POSTGIS maior.menor`, por exemplo `17-3.5` |
+| Container atual do Postgres | `POSTGRES_PASSWORD`, `POSTGRES_USER`, `POSTGRES_DB` | mesmos nomes |
+| Container atual do Postgres, seção *Volumes* | nome do volume montado em `/var/lib/postgresql/data` | `POSTGRES_VOLUME` |
+| Container atual do miniserver | `JWT_SECRET` e os `TABLE_*` | mesmos nomes |
+| Container atual do dashboard | `CARTO_API_KEY`, se existir | `CARTO_API_KEY` |
 
 Confira que a tag de `POSTGIS_TAG` existe em <https://hub.docker.com/r/postgis/postgis/tags>.
 Ela precisa ter **a mesma versão principal do Postgres** que está rodando hoje;
@@ -36,7 +41,7 @@ Copie `stack.env.example` para um arquivo **fora do repositório** (por exemplo
 
 ## 2. Backup do banco
 
-No Portainer, abra o console do `terra_postgis` (*Console*, `/bin/bash`, *Connect*) e rode:
+No Portainer, abra o console do container atual do Postgres (*Console*, `/bin/bash`, *Connect*) e rode:
 
 ```bash
 pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc -f /var/lib/postgresql/data/backup_antes_portainer.dump
@@ -46,17 +51,20 @@ O arquivo fica dentro do volume, que será mantido. Se você tiver SSH no
 servidor, prefira tirar a cópia para fora:
 
 ```bash
-docker exec terra_postgis pg_dump -U terra -d geodata -Fc > geodata_$(date +%F).dump
+docker exec NOME_DO_CONTAINER_ATUAL_DO_POSTGRES pg_dump -U terra -d geodata -Fc > geodata_$(date +%F).dump
 ```
 
 ## 3. Remover os containers antigos (não os volumes)
 
-Em *Containers*, selecione `dashboard_fundiario_ce`, `terra_geodata_mini_server`
-e `terra_postgis`, clique em *Stop* e depois em *Remove*. **Não marque** a opção
-de remover volumes. Não remova a stack antiga pela tela de *Stacks* nem o volume
-em *Volumes*.
+Em *Containers*, selecione os três containers atuais (dashboard, miniserver e
+Postgres), clique em *Stop* e depois em *Remove*. **Não marque** a opção de
+remover volumes. Não remova a stack antiga pela tela de *Stacks* nem o volume em
+*Volumes*.
 
-Isso libera os nomes dos containers para a stack nova.
+**Não pule este passo.** Como a stack nova usa outros nomes, o Portainer não
+acusa conflito se os antigos continuarem lá, e um segundo Postgres subiria no
+mesmo volume, o que corrompe o banco. Confira que os três antigos sumiram da
+lista antes de seguir.
 
 ## 4. Criar a stack no Portainer
 
@@ -72,11 +80,13 @@ mensagem que diz qual é.
 
 ## 5. Acompanhar a subida
 
-1. `terra_postgis` fica *healthy* em segundos.
-2. `terra_geodata_mini_server` refaz a carga dos CSVs antes de responder. Nos
-   logs aparece `RESUMO DA IMPORTAÇÃO UNIFICADA` e depois `Iniciando Gunicorn`.
-   Leva de 2 a 5 minutos; o healthcheck espera até 15.
-3. `dashboard_fundiario_ce` sobe logo. Até o miniserver terminar, as páginas de
+1. `terrace-postgres` fica *healthy* em segundos.
+2. `terrace-gdmserver` sobe em segundos: com `IMPORTAR_DADOS_NA_INICIALIZACAO=false`
+   (padrão), os logs mostram `Importação na inicialização desativada.` e depois
+   `Iniciando Gunicorn`, e os dados vêm do volume do Postgres. Com `true`, ele
+   refaz a carga dos CSVs antes (aparece `RESUMO DA IMPORTAÇÃO UNIFICADA`), o que
+   leva de 2 a 5 minutos; o healthcheck espera até 15.
+3. `terrace-dashboard` sobe logo. Até o miniserver terminar, as páginas de
    dados mostram "Não foi possível carregar os dados".
 
 ## 6. Conferir
@@ -91,7 +101,7 @@ mensagem que diz qual é.
 - Os três containers aparecem como *healthy* ou *running*.
 
 Depois de conferir, apague o backup de dentro do volume, se tiver criado:
-`rm /var/lib/postgresql/data/backup_antes_portainer.dump` no console do `terra_postgis`.
+`rm /var/lib/postgresql/data/backup_antes_portainer.dump` no console do `terrace-postgres`.
 
 ## Atualizações futuras
 

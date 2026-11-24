@@ -10,7 +10,7 @@ services:
     # Mesma versão principal que já está em produção. Trocar a versão principal
     # do Postgres exige migrar o volume; veja o roteiro antes de mudar.
     image: docker.io/postgis/postgis:${POSTGIS_TAG:?defina POSTGIS_TAG com a versão em uso, por exemplo 17-3.5}
-    container_name: terra_postgis
+    container_name: terrace-postgres
     environment:
       - TZ=America/Fortaleza
       - POSTGRES_USER=${POSTGRES_USER:-terra}
@@ -33,7 +33,7 @@ services:
 
   tgdmserver:
     image: docker.io/wellingtonwfsarmento/terra-geodata-mini-server:${TGDM_TAG:-1.2.0}
-    container_name: terra_geodata_mini_server
+    container_name: terrace-gdmserver
     depends_on:
       postgres:
         condition: service_healthy
@@ -62,6 +62,9 @@ services:
       - GUNICORN_THREADS=${GUNICORN_THREADS:-8}
       - GUNICORN_TIMEOUT=${GUNICORN_TIMEOUT:-120}
       - GUNICORN_LOG_LEVEL=${GUNICORN_LOG_LEVEL:-info}
+      # Carga dos CSVs ao iniciar. Os dados já ficam no volume do Postgres; use true só para
+      # recarregar a partir de CSVs presentes em /tgdmserver/datasets.
+      - IMPORTAR_DADOS_NA_INICIALIZACAO=${IMPORTAR_DADOS_NA_INICIALIZACAO:-false}
       # A importação da GeoAPI do IDACE é manual; TOKEN_GEOAPI não é usado aqui.
     ports:
       # Só na própria máquina do servidor (por exemplo, para o Terra-AI).
@@ -73,7 +76,7 @@ services:
 
   dfundce:
     image: docker.io/wellingtonwfsarmento/dashboard-fundiario-ceara:${DFUNDCE_TAG:-1.2.0}
-    container_name: dashboard_fundiario_ce
+    container_name: terrace-dashboard
     depends_on:
       - tgdmserver
     environment:
